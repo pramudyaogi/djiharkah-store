@@ -1,0 +1,14 @@
+{
+  "name": "djiharkah-store-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:admin": "npm run dev --workspace=admin",
+    "dev:store": "npm run dev --workspace=store",
+    "build:admin": "npm run build --workspace=admin",
+    "build:store": "npm run build --workspace=store",
+    "dev": "npm run dev:admin"
+  }
+}
