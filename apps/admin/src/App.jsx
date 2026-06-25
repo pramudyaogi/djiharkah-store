@@ -5,6 +5,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import Customers from './pages/Customers';
 
 function AppRoutes() {
   const { user, role } = useAuth();
@@ -19,9 +20,9 @@ function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
           <Route path="/" element={<Dashboard />} />
-          <Route path="/products" element={<div className="p-8 text-gray-600 bg-white rounded-lg shadow-sm border border-gray-100">Products Management Placeholder</div>} />
-          <Route path="/orders" element={<div className="p-8 text-gray-600 bg-white rounded-lg shadow-sm border border-gray-100">Orders Management Placeholder</div>} />
-          <Route path="/customers" element={<div className="p-8 text-gray-600 bg-white rounded-lg shadow-sm border border-gray-100">Customers Management Placeholder</div>} />
+          <Route path="/products" element={<div className="p-8 text-zinc-400 bg-zinc-900/50 rounded-2xl border border-zinc-800">Products Management Placeholder</div>} />
+          <Route path="/orders" element={<div className="p-8 text-zinc-400 bg-zinc-900/50 rounded-2xl border border-zinc-800">Orders Management Placeholder</div>} />
+          <Route path="/customers" element={<Customers />} />
         </Route>
       </Route>
       

@@ -32,21 +32,14 @@ export default function Login() {
         {/* Background Image with Overlay */}
         <div 
           className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat opacity-60"
-          style={{ backgroundImage: "url('/login-bg.jpeg')" }}
+          style={{ backgroundImage: "url('/login-bg.png')" }}
         ></div>
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent z-10"></div>
-        <div className="absolute inset-0 bg-gradient-to-r from-black/80 to-transparent z-10"></div>
+        {/* Efek transisi dari bawah */}
+        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-transparent z-10"></div>
+        {/* Efek transisi halus dari kiri (gelap) ke tengah (terang) lalu ke KANAN (menyatu dengan panel login zinc-950) */}
+        <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/80 via-transparent to-zinc-950 z-10"></div>
         
-        {/* Content */}
-        <div className="relative z-20 text-left px-16 w-full">
-          <h1 className="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-yellow-400 to-yellow-600 tracking-tight mb-6">
-            Djiharkah Store
-          </h1>
-          <p className="text-2xl text-zinc-300 font-light tracking-wide max-w-lg leading-relaxed">
-            Premium E-Commerce Management System.
-          </p>
-          <div className="mt-12 w-24 h-1 bg-gradient-to-r from-yellow-400 to-yellow-600 rounded-full"></div>
-        </div>
+        {/* Area teks dihapus karena gambar latar belakang sudah memiliki teks sendiri */}
       </div>
 
       {/* Right Side: Login Form */}

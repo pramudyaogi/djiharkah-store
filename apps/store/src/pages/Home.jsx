@@ -39,26 +39,35 @@ export default function Home() {
   }
 
   return (
-    <div className="max-w-[1200px] mx-auto pt-6 px-4">
+    <div className="w-full flex flex-col items-center">
       
-      {/* Hero Banner Section */}
-      <div className="bg-hitam rounded-sm overflow-hidden relative h-[300px] md:h-[400px] mb-8 shadow-md">
-        <div className="absolute inset-0 z-0 opacity-60 bg-[url('https://images.unsplash.com/photo-1574866089759-45037d6e680a?q=80&w=1200')] bg-cover bg-center"></div>
-        <div className="absolute inset-0 bg-gradient-to-r from-hitam via-hitam/80 to-transparent"></div>
-        <div className="relative z-10 p-10 md:p-16 flex flex-col justify-center h-full max-w-2xl">
-          <h1 className="text-4xl md:text-5xl font-playfair font-bold text-emas mb-4 leading-tight">
-            Kemewahan dalam Ibadah
-          </h1>
-          <p className="text-gray-300 text-sm md:text-base mb-8 max-w-lg leading-relaxed">
-            Temukan koleksi sarung eksklusif dari merek-merek ternama. Kualitas premium untuk kenyamanan maksimal Anda dalam beribadah.
-          </p>
-          <Link to="/products" className="w-max bg-emas text-hitam px-8 py-3 text-sm font-bold shadow-[0_4px_15px_rgba(212,168,73,0.4)] hover:bg-emas-terang hover:-translate-y-1 transition-all duration-300">
-            Belanja Sekarang
-          </Link>
+      {/* Hero Banner Section (Rounded & Breathable) */}
+      <div className="w-full max-w-[1400px] px-4 md:px-6 mb-12 mt-6">
+        <div className="w-full relative h-[400px] md:h-[500px] rounded-3xl overflow-hidden shadow-xl border border-gray-100">
+          <div className="absolute inset-0 z-0 bg-[url('https://images.unsplash.com/photo-1574866089759-45037d6e680a?q=80&w=2000')] bg-cover bg-center"></div>
+          {/* Subtle gradient just to make text readable, not fully black */}
+          <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-transparent"></div>
+          
+          <div className="h-full px-8 md:px-16 relative z-10 flex flex-col justify-center">
+            <div className="max-w-xl">
+              <h1 className="text-4xl md:text-6xl font-playfair font-bold text-white mb-6 leading-tight drop-shadow-md">
+                Kemewahan <br/><span className="text-yellow-500">dalam Ibadah</span>
+              </h1>
+              <p className="text-gray-200 text-sm md:text-lg mb-10 leading-relaxed font-light drop-shadow-md">
+                Temukan koleksi sarung eksklusif dari merek-merek ternama. Kualitas premium untuk kenyamanan maksimal Anda dalam beribadah.
+              </p>
+              <Link to="/products" className="inline-flex items-center gap-2 bg-yellow-500 text-black px-8 py-3.5 rounded-full text-sm font-bold hover:bg-yellow-400 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+                Mulai Belanja 
+                <span className="text-lg">→</span>
+              </Link>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Kategori Section (Horizontal Grid) */}
+      {/* Main Content Container */}
+      <div className="max-w-[1400px] w-full px-6">
+        {/* Kategori Section (Horizontal Grid) */}
       <div className="bg-white rounded-sm shadow-sm mb-8">
         <div className="p-4 border-b border-gray-100 flex justify-between items-center">
           <h2 className="text-lg font-bold text-gray-500 uppercase">Kategori Produk</h2>
@@ -141,6 +150,7 @@ export default function Home() {
             <p className="text-gray-500 text-lg">Belum ada produk aktif.</p>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

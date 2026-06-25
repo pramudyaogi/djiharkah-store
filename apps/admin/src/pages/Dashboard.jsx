@@ -2,25 +2,34 @@ import React from 'react';
 
 export default function Dashboard() {
   return (
-    <div className="bg-white shadow rounded-lg p-6 border border-gray-100">
-      <h3 className="text-lg font-medium leading-6 text-gray-900">Dashboard Overview</h3>
-      <p className="mt-2 text-sm text-gray-500">
-        Welcome to the admin panel. Here you can manage your products, orders, and customers.
-      </p>
+    <div className="space-y-8">
+      <div>
+        <h3 className="text-2xl font-bold leading-6 text-white tracking-tight">Dashboard Overview</h3>
+        <p className="mt-3 text-sm text-zinc-400">
+          Selamat datang di panel admin. Kelola katalog produk, pesanan, dan pelanggan Anda di sini.
+        </p>
+      </div>
       
-      <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {/* Placeholder cards */}
-        <div className="bg-indigo-50 overflow-hidden shadow-sm rounded-lg border border-indigo-100 p-6 flex flex-col justify-center items-center">
-          <dt className="text-sm font-medium text-indigo-500 truncate mb-2">Total Products</dt>
-          <dd className="text-4xl font-bold text-gray-900">0</dd>
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Card 1: Products */}
+        <div className="bg-zinc-900/50 backdrop-blur-sm overflow-hidden rounded-2xl border border-zinc-800/80 p-8 flex flex-col justify-center items-center transition-all hover:border-yellow-500/30 hover:shadow-[0_0_30px_rgba(234,179,8,0.05)] relative group">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-zinc-800 to-zinc-800 group-hover:from-yellow-600 group-hover:to-yellow-400 transition-all duration-500"></div>
+          <dt className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Total Products</dt>
+          <dd className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-zinc-400">0</dd>
         </div>
-        <div className="bg-green-50 overflow-hidden shadow-sm rounded-lg border border-green-100 p-6 flex flex-col justify-center items-center">
-          <dt className="text-sm font-medium text-green-500 truncate mb-2">Total Orders</dt>
-          <dd className="text-4xl font-bold text-gray-900">0</dd>
+        
+        {/* Card 2: Orders */}
+        <div className="bg-zinc-900/50 backdrop-blur-sm overflow-hidden rounded-2xl border border-zinc-800/80 p-8 flex flex-col justify-center items-center transition-all hover:border-yellow-500/30 hover:shadow-[0_0_30px_rgba(234,179,8,0.05)] relative group">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-zinc-800 to-zinc-800 group-hover:from-yellow-600 group-hover:to-yellow-400 transition-all duration-500"></div>
+          <dt className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Total Orders</dt>
+          <dd className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-zinc-400">0</dd>
         </div>
-        <div className="bg-blue-50 overflow-hidden shadow-sm rounded-lg border border-blue-100 p-6 flex flex-col justify-center items-center">
-          <dt className="text-sm font-medium text-blue-500 truncate mb-2">Total Customers</dt>
-          <dd className="text-4xl font-bold text-gray-900">0</dd>
+
+        {/* Card 3: Customers */}
+        <div className="bg-zinc-900/50 backdrop-blur-sm overflow-hidden rounded-2xl border border-zinc-800/80 p-8 flex flex-col justify-center items-center transition-all hover:border-yellow-500/30 hover:shadow-[0_0_30px_rgba(234,179,8,0.05)] relative group">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-zinc-800 to-zinc-800 group-hover:from-yellow-600 group-hover:to-yellow-400 transition-all duration-500"></div>
+          <dt className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Total Customers</dt>
+          <dd className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-zinc-400">0</dd>
         </div>
       </div>
     </div>

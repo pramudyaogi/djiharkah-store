@@ -16,73 +16,94 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="bg-hitam sticky top-0 z-50 shadow-md">
-      {/* Top Tier (Thin) */}
-      <div className="bg-hitam-gelap border-b border-emas/20 py-1 hidden sm:block">
-        <div className="max-w-[1200px] mx-auto px-4 flex justify-between text-xs text-gray-300">
-          <div className="flex gap-4">
-            <Link to="/about" className="hover:text-emas transition-colors">Tentang Kami</Link>
-            <span className="text-gray-600">|</span>
-            <Link to="/help" className="hover:text-emas transition-colors flex items-center gap-1"><HelpCircle size={12}/> Bantuan</Link>
-          </div>
-          <div className="flex gap-4">
-            {user ? (
-              <div className="flex items-center gap-4">
-                <Link to="/profile" className="font-medium text-emas hover:text-emas-terang transition-colors flex items-center gap-1">
-                  <User size={12} /> {user.email}
-                </Link>
-                <button onClick={handleLogout} className="hover:text-red-400 transition-colors flex items-center gap-1">
-                  <LogOut size={12} /> Keluar
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-4">
-                <Link to="/register" className="font-medium text-emas hover:text-emas-terang transition-colors">Daftar</Link>
-                <span className="text-gray-600">|</span>
-                <Link to="/login" className="font-medium text-emas hover:text-emas-terang transition-colors">Login</Link>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Main Bar (Sticky) */}
-      <div className="max-w-[1200px] mx-auto px-4 py-4">
-        <div className="flex items-center gap-8">
+    <nav className="bg-white/95 backdrop-blur-md sticky top-0 z-50 shadow-sm border-b border-gray-100">
+      <div className="max-w-[1400px] mx-auto px-6 py-4">
+        <div className="flex items-center justify-between gap-8">
           
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-2 shrink-0">
-            <Store className="text-emas" size={36} />
+          <Link to="/" className="flex items-center gap-3 shrink-0 group">
+            <div className="w-10 h-10 rounded-full bg-zinc-900 flex items-center justify-center shadow-md group-hover:bg-yellow-500 transition-colors">
+              <Store className="text-white group-hover:text-black transition-colors" size={18} />
+            </div>
             <div className="flex flex-col">
-              <span className="text-2xl font-bold font-playfair text-emas leading-none tracking-wide">Djiharkah</span>
-              <span className="text-xs text-white tracking-[0.2em] ml-0.5">STORE</span>
+              <span className="text-2xl font-bold font-playfair text-zinc-900 leading-none tracking-tight">Djiharkah</span>
+              <span className="text-[10px] text-yellow-600 font-bold tracking-[0.3em] ml-0.5 mt-0.5 uppercase">Store</span>
             </div>
           </Link>
 
-          {/* Search Bar */}
-          <div className="flex-1 flex flex-col">
-            <div className="flex w-full bg-white rounded-sm overflow-hidden border-2 border-emas focus-within:shadow-[0_0_8px_rgba(212,168,73,0.6)] transition-shadow">
+          {/* Search Bar - Sleek & Modern */}
+          <div className="flex-1 max-w-2xl hidden md:flex">
+            <div className="flex w-full bg-gray-50 rounded-full overflow-hidden border border-gray-200 focus-within:border-yellow-400 focus-within:bg-white transition-all shadow-inner">
+              <div className="pl-5 flex items-center justify-center">
+                <Search size={18} className="text-gray-400" />
+              </div>
               <input 
                 type="text" 
                 placeholder="Cari koleksi sarung premium..." 
-                className="w-full px-4 py-2 text-hitam focus:outline-none"
+                className="w-full px-4 py-3 bg-transparent text-zinc-800 placeholder-gray-400 focus:outline-none text-sm"
               />
-              <button className="bg-emas hover:bg-emas-terang px-6 flex items-center justify-center transition-colors">
-                <Search size={20} className="text-hitam" />
+              <button className="bg-zinc-900 hover:bg-yellow-500 hover:text-black text-white px-6 font-medium transition-colors text-sm">
+                Cari
               </button>
             </div>
           </div>
 
-          {/* Cart Icon */}
-          <div className="shrink-0 relative mr-4 cursor-pointer hover:scale-110 transition-transform" onClick={() => navigate('/cart')}>
-            <ShoppingCart size={32} className="text-emas" />
-            {cartCount > 0 && (
-              <span className="absolute -top-2 -right-3 bg-white text-hitam border border-emas text-[10px] font-bold rounded-full h-5 min-w-[20px] px-1 flex items-center justify-center">
-                {cartCount > 99 ? '99+' : cartCount}
-              </span>
+          {/* Right Section: Actions */}
+          <div className="flex items-center gap-6 shrink-0">
+            {/* Cart Icon */}
+            <div 
+              className="relative cursor-pointer group flex items-center gap-2" 
+              onClick={() => navigate('/cart')}
+            >
+              <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center border border-gray-200 group-hover:border-yellow-400 group-hover:bg-white transition-all">
+                <ShoppingCart size={18} className="text-zinc-600 group-hover:text-yellow-600 transition-colors" />
+              </div>
+              {cartCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-yellow-500 text-black border-2 border-white text-[10px] font-bold rounded-full h-5 min-w-[20px] px-1 flex items-center justify-center shadow-sm">
+                  {cartCount > 99 ? '99+' : cartCount}
+                </span>
+              )}
+            </div>
+
+            <div className="w-px h-8 bg-gray-200 hidden sm:block"></div>
+
+            {/* Auth Area */}
+            {user ? (
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 bg-gray-50 border border-gray-200 py-1.5 px-1.5 pr-4 rounded-full">
+                  <div className="w-7 h-7 rounded-full bg-zinc-900 flex items-center justify-center text-white font-bold text-xs">
+                    {user.email.charAt(0).toUpperCase()}
+                  </div>
+                  <Link to="/profile" className="text-sm font-medium text-zinc-700 hover:text-zinc-900 transition-colors">
+                    {user.email.split('@')[0]}
+                  </Link>
+                </div>
+                <button 
+                  onClick={handleLogout} 
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                  title="Logout"
+                >
+                  <LogOut size={18} />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <Link 
+                  to="/login" 
+                  className="px-5 py-2 text-sm font-medium text-zinc-600 hover:text-zinc-900 transition-colors"
+                >
+                  Masuk
+                </Link>
+                <Link 
+                  to="/register" 
+                  className="px-6 py-2.5 text-sm font-bold text-white bg-zinc-900 rounded-full hover:bg-yellow-500 hover:text-black hover:shadow-md transition-all"
+                >
+                  Daftar
+                </Link>
+              </div>
             )}
           </div>
-          
+
         </div>
       </div>
     </nav>

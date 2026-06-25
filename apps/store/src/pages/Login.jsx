@@ -28,54 +28,59 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full bg-white p-8 border border-emas/30 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+    <div className="min-h-[80vh] flex items-center justify-center bg-[#fafafa] py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+      {/* Decorative background elements (optional, very subtle) */}
+      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-yellow-400/5 rounded-full blur-[100px] pointer-events-none"></div>
+      
+      <div className="max-w-md w-full bg-white p-10 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.03)] border border-gray-100 relative z-10">
         <div className="text-center mb-10">
-          <h2 className="text-3xl font-playfair font-bold text-hitam mb-2">Selamat Datang</h2>
-          <p className="text-abu-abu">Masuk ke akun Djiharkah Store Anda</p>
+          <h2 className="text-3xl font-playfair font-bold text-zinc-900 mb-3 tracking-tight">Selamat Datang</h2>
+          <p className="text-gray-500 text-sm">Masuk ke akun Djiharkah Store Anda</p>
         </div>
 
         {error && (
-          <div className="bg-red-50 text-red-700 p-3 rounded mb-6 text-sm border border-red-200">
+          <div className="bg-red-50 text-red-700 p-4 rounded-2xl mb-6 text-sm border border-red-100 flex items-center">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-sm font-medium text-hitam mb-2">Email Address</label>
+            <label className="block text-xs font-semibold text-zinc-600 uppercase tracking-wider mb-2 ml-1">Email Address</label>
             <input
               type="email"
               required
-              className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:border-emas focus:ring-1 focus:ring-emas transition-all"
+              className="w-full px-5 py-3.5 bg-gray-50 border border-transparent rounded-xl focus:outline-none focus:border-yellow-400 focus:bg-white focus:ring-4 focus:ring-yellow-400/10 transition-all text-sm text-zinc-800"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              placeholder="Masukkan email Anda"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-hitam mb-2">Password</label>
+            <label className="block text-xs font-semibold text-zinc-600 uppercase tracking-wider mb-2 ml-1">Password</label>
             <input
               type="password"
               required
-              className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:border-emas focus:ring-1 focus:ring-emas transition-all"
+              className="w-full px-5 py-3.5 bg-gray-50 border border-transparent rounded-xl focus:outline-none focus:border-yellow-400 focus:bg-white focus:ring-4 focus:ring-yellow-400/10 transition-all text-sm text-zinc-800"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              placeholder="Masukkan password Anda"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-emas text-hitam py-3 font-bold hover:bg-hitam hover:text-emas border border-transparent hover:border-emas transition-colors disabled:opacity-50 mt-4"
+            className="w-full bg-zinc-900 text-white py-4 rounded-full font-bold text-sm tracking-wide hover:bg-yellow-500 hover:text-black hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 mt-8"
           >
             {loading ? 'MEMPROSES...' : 'MASUK'}
           </button>
         </form>
 
-        <div className="mt-8 text-center text-sm text-abu-abu border-t border-gray-100 pt-6">
+        <div className="mt-10 text-center text-sm text-gray-500">
           Belum punya akun?{' '}
-          <Link to="/register" className="font-bold text-emas hover:text-emas-terang transition-colors">
+          <Link to="/register" className="font-bold text-zinc-900 hover:text-yellow-600 transition-colors">
             Daftar Sekarang
           </Link>
         </div>

@@ -25,13 +25,15 @@ export default function Layout() {
   ];
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-zinc-950">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-gray-200 shadow-sm flex flex-col">
-        <div className="h-16 flex items-center px-6 border-b border-gray-200">
-          <span className="text-xl font-bold text-indigo-600">Djiharkah Admin</span>
+      <aside className="w-64 bg-zinc-900 border-r border-zinc-800 shadow-xl flex flex-col">
+        <div className="h-16 flex items-center px-6 border-b border-zinc-800">
+          <span className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600 tracking-wider">
+            DJIHARKAH
+          </span>
         </div>
-        <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
+        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
@@ -39,9 +41,13 @@ export default function Layout() {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${isActive ? 'bg-indigo-50 text-indigo-600 font-medium' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`}
+                className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-all duration-200 ${
+                  isActive 
+                  ? 'bg-yellow-500/10 text-yellow-500 font-semibold shadow-[0_0_15px_rgba(234,179,8,0.1)]' 
+                  : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
+                }`}
               >
-                <Icon size={20} />
+                <Icon size={20} className={isActive ? 'text-yellow-500' : 'text-zinc-500'} />
                 {item.name}
               </Link>
             )
@@ -52,15 +58,21 @@ export default function Layout() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <header className="h-16 bg-white border-b border-gray-200 shadow-sm flex items-center justify-between px-8">
-          <h2 className="text-xl font-semibold text-gray-800">
+        <header className="h-16 bg-zinc-900/80 backdrop-blur-md border-b border-zinc-800 shadow-sm flex items-center justify-between px-8 relative z-10">
+          <h2 className="text-xl font-semibold text-zinc-100 tracking-tight">
             {navItems.find(i => i.path === location.pathname)?.name || 'Admin Panel'}
           </h2>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">{user?.email}</span>
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center text-black font-bold text-sm shadow-md">
+                {user?.email?.charAt(0).toUpperCase() || 'A'}
+              </div>
+              <span className="text-sm font-medium text-zinc-300 hidden sm:block">{user?.email}</span>
+            </div>
+            <div className="h-6 w-px bg-zinc-700"></div>
             <button
               onClick={handleLogout}
-              className="flex items-center gap-2 text-sm text-red-600 hover:text-red-700 transition-colors"
+              className="flex items-center gap-2 text-sm font-medium text-zinc-400 hover:text-red-400 transition-colors"
             >
               <LogOut size={18} />
               Logout
@@ -69,8 +81,13 @@ export default function Layout() {
         </header>
         
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-8">
-          <Outlet />
+        <main className="flex-1 overflow-y-auto p-8 relative">
+          {/* Subtle background glow */}
+          <div className="absolute top-0 left-1/4 w-96 h-96 bg-yellow-900/5 blur-[100px] rounded-full pointer-events-none"></div>
+          
+          <div className="relative z-10">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>
