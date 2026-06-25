@@ -26,55 +26,85 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-xl shadow-md border border-gray-100">
-        <div>
-          <h2 className="mt-2 text-center text-3xl font-extrabold text-gray-900">
-            Admin Login
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Djiharkah Store Admin Panel
+    <div className="min-h-screen flex w-full">
+      {/* Left Side: Background Image */}
+      <div className="hidden lg:flex w-1/2 bg-black relative justify-center items-center overflow-hidden">
+        {/* Background Image with Overlay */}
+        <div 
+          className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat opacity-40"
+          style={{ backgroundImage: "url('https://images.unsplash.com/photo-1618220179428-22790b461013?q=80&w=2727')" }}
+        ></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent z-10"></div>
+        <div className="absolute inset-0 bg-gradient-to-r from-black/80 to-transparent z-10"></div>
+        
+        {/* Content */}
+        <div className="relative z-20 text-left px-16 w-full">
+          <h1 className="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-yellow-400 to-yellow-600 tracking-tight mb-6">
+            Djiharkah Store
+          </h1>
+          <p className="text-2xl text-zinc-300 font-light tracking-wide max-w-lg leading-relaxed">
+            Premium E-Commerce Management System.
           </p>
+          <div className="mt-12 w-24 h-1 bg-gradient-to-r from-yellow-400 to-yellow-600 rounded-full"></div>
         </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {error && (
-            <div className="bg-red-50 text-red-700 p-3 rounded-md text-sm text-center">
-              {error}
-            </div>
-          )}
-          <div className="rounded-md shadow-sm space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email address</label>
-              <input
-                type="email"
-                required
-                className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-              <input
-                type="password"
-                required
-                className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-          </div>
+      </div>
 
+      {/* Right Side: Login Form */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center bg-zinc-950 py-12 px-4 sm:px-6 lg:px-8 relative">
+        {/* Subtle glow effect behind the form */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-yellow-900/10 blur-3xl rounded-full pointer-events-none"></div>
+
+        <div className="max-w-md w-full space-y-8 bg-zinc-900/80 backdrop-blur-xl p-10 rounded-2xl shadow-2xl border border-zinc-800/80 relative z-10">
           <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 transition-colors"
-            >
-              {loading ? 'Signing in...' : 'Sign in'}
-            </button>
+            <h2 className="mt-2 text-center text-3xl font-bold text-white tracking-tight">
+              Admin Portal
+            </h2>
+            <p className="mt-3 text-center text-sm text-zinc-400">
+              Silakan masuk untuk mengelola toko Anda
+            </p>
           </div>
-        </form>
+          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+            {error && (
+              <div className="bg-red-950/50 border border-red-500/50 text-red-400 p-3 rounded-lg text-sm text-center backdrop-blur-sm">
+                {error}
+              </div>
+            )}
+            <div className="space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-1.5">Email address</label>
+                <input
+                  type="email"
+                  required
+                  className="appearance-none relative block w-full px-4 py-3 bg-zinc-950/50 border border-zinc-800 placeholder-zinc-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all sm:text-sm"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="admin@djiharkah.com"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-1.5">Password</label>
+                <input
+                  type="password"
+                  required
+                  className="appearance-none relative block w-full px-4 py-3 bg-zinc-950/50 border border-zinc-800 placeholder-zinc-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all sm:text-sm"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={loading}
+                className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-bold rounded-lg text-black bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-600 hover:from-yellow-300 hover:via-yellow-400 hover:to-yellow-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-900 focus:ring-yellow-500 disabled:opacity-50 transition-all shadow-[0_0_20px_rgba(234,179,8,0.15)] hover:shadow-[0_0_25px_rgba(234,179,8,0.3)]"
+              >
+                {loading ? 'Authenticating...' : 'Sign In'}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   );
