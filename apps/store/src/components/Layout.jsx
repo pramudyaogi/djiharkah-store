@@ -4,35 +4,55 @@ import Navbar from './Navbar';
 
 export default function Layout() {
   return (
-    <div className="min-h-screen flex flex-col bg-white">
+    <div className="min-h-screen flex flex-col bg-[#f5f5f5]">
       <Navbar />
-      <main className="flex-grow w-full">
+      <main className="flex-grow w-full pb-16">
         <Outlet />
       </main>
-      <footer className="bg-hitam-gelap text-gray-400 py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      
+      {/* Marketplace Footer */}
+      <footer className="bg-white border-t-4 border-emas text-abu-abu pt-12 pb-6 text-sm">
+        <div className="max-w-[1200px] mx-auto px-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8 border-b border-gray-200 pb-8">
             <div>
-              <h3 className="text-emas font-playfair text-xl font-bold mb-4">Djiharkah Store</h3>
-              <p className="text-sm">Menyediakan sarung muslim eksklusif dan premium dari berbagai merek terbaik untuk kenyamanan ibadah Anda.</p>
-            </div>
-            <div>
-              <h3 className="text-emas font-playfair text-xl font-bold mb-4">Tautan</h3>
-              <ul className="space-y-2 text-sm">
-                <li><a href="/" className="hover:text-emas-terang transition-colors text-emas">Home</a></li>
-                <li><a href="/products" className="hover:text-emas-terang transition-colors text-emas">Produk Kami</a></li>
+              <h3 className="text-hitam font-bold mb-4">LAYANAN PELANGGAN</h3>
+              <ul className="space-y-2 text-gray-600">
+                <li><a href="#" className="hover:text-emas">Bantuan</a></li>
+                <li><a href="#" className="hover:text-emas">Metode Pembayaran</a></li>
+                <li><a href="#" className="hover:text-emas">Pengiriman</a></li>
+                <li><a href="#" className="hover:text-emas">Pengembalian Barang</a></li>
+                <li><a href="#" className="hover:text-emas">Hubungi Kami</a></li>
               </ul>
             </div>
             <div>
-              <h3 className="text-emas font-playfair text-xl font-bold mb-4">Kontak</h3>
-              <ul className="space-y-2 text-sm">
-                <li>Email: support@djiharkah.com</li>
-                <li>Telepon: +62 812 3456 7890</li>
+              <h3 className="text-hitam font-bold mb-4">JELAJAHI DJIHARKAH</h3>
+              <ul className="space-y-2 text-gray-600">
+                <li><a href="#" className="hover:text-emas">Tentang Kami</a></li>
+                <li><a href="#" className="hover:text-emas">Kebijakan Privasi</a></li>
+                <li><a href="#" className="hover:text-emas">Syarat & Ketentuan</a></li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="text-hitam font-bold mb-4">PEMBAYARAN</h3>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="h-8 bg-gray-100 border border-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">BCA</div>
+                <div className="h-8 bg-gray-100 border border-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">BNI</div>
+                <div className="h-8 bg-gray-100 border border-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">MANDIRI</div>
+                <div className="h-8 bg-gray-100 border border-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">QRIS</div>
+                <div className="h-8 bg-gray-100 border border-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">ALFAMART</div>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-hitam font-bold mb-4">IKUTI KAMI</h3>
+              <ul className="space-y-2 text-gray-600">
+                <li><a href="#" className="hover:text-emas flex items-center gap-2">IG: @djiharkah.store</a></li>
+                <li><a href="#" className="hover:text-emas flex items-center gap-2">FB: Djiharkah Store</a></li>
               </ul>
             </div>
           </div>
-          <div className="border-t border-gray-800 mt-8 pt-8 text-center text-sm">
-            &copy; {new Date().getFullYear()} Djiharkah Store. All rights reserved.
+          <div className="flex flex-col md:flex-row justify-between items-center text-xs text-gray-500">
+            <p>&copy; {new Date().getFullYear()} Djiharkah Store. All Rights Reserved.</p>
+            <p>Negara: Indonesia</p>
           </div>
         </div>
       </footer>
