@@ -31,8 +31,8 @@ export default function Login() {
       <div className="hidden lg:flex w-1/2 bg-black relative justify-center items-center overflow-hidden">
         {/* Background Image with Overlay */}
         <div 
-          className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat opacity-40"
-          style={{ backgroundImage: "url('https://images.unsplash.com/photo-1618220179428-22790b461013?q=80&w=2727')" }}
+          className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat opacity-60"
+          style={{ backgroundImage: "url('/login-bg.jpeg')" }}
         ></div>
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent z-10"></div>
         <div className="absolute inset-0 bg-gradient-to-r from-black/80 to-transparent z-10"></div>
