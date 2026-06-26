@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Package, Truck, CheckCircle, Clock, Search, AlertCircle } from 'lucide-react';
+import { Package, Truck, CheckCircle, Clock, Search, AlertCircle, ChevronLeft } from 'lucide-react';
 
 export default function TrackOrder() {
   const [searchParams] = useSearchParams();
@@ -62,7 +62,13 @@ export default function TrackOrder() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto py-12 px-4 min-h-[70vh]">
+    <div className="max-w-4xl mx-auto py-10 px-4 min-h-[70vh]">
+      {/* Back Button */}
+      <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-gray-500 hover:text-emas transition-colors mb-8 group">
+        <ChevronLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+        Kembali
+      </button>
+
       <h1 className="text-3xl font-playfair font-bold text-hitam mb-2 text-center">Lacak Pesanan Anda</h1>
       <p className="text-center text-gray-500 mb-10">Masukkan kode resi yang Anda dapatkan saat checkout.</p>
       

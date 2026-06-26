@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Store, Star, Share2, Heart, ShieldCheck, ShoppingCart, User, AlertCircle } from 'lucide-react';
+import { Store, Star, Share2, Heart, ShieldCheck, ShoppingCart, User, AlertCircle, ChevronLeft } from 'lucide-react';
 import PopupModal from '../components/PopupModal';
 
 export default function ProductDetail() {
@@ -57,6 +57,12 @@ export default function ProductDetail() {
 
   return (
     <div className="max-w-[1200px] mx-auto pt-6 px-4 pb-20">
+      {/* Back Button */}
+      <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-gray-500 hover:text-emas transition-colors mb-5 group">
+        <ChevronLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+        Kembali
+      </button>
+
       {/* Breadcrumb */}
       <div className="flex items-center text-sm mb-4 text-gray-500">
         <Link to="/" className="hover:text-emas transition-colors text-emas font-medium">Djiharkah</Link>
@@ -66,12 +72,12 @@ export default function ProductDetail() {
         <span className="text-hitam truncate max-w-[200px]">{product.name}</span>
       </div>
 
-      <div className="bg-white p-4 shadow-sm flex flex-col md:flex-row gap-8 mb-6">
+      <div className="bg-white p-6 md:p-10 rounded-3xl shadow-soft flex flex-col md:flex-row gap-10 mb-8 border border-gray-100">
         {/* Left: Image Gallery */}
         <div className="w-full md:w-[450px] shrink-0">
-          <div className="w-full pt-[100%] relative bg-gray-50 border border-gray-100 mb-2">
+          <div className="w-full pt-[100%] relative bg-gray-50 rounded-2xl overflow-hidden border border-gray-100 shadow-sm mb-2 group">
             {product.image_url ? (
-              <img src={product.image_url} alt={product.name} className="absolute inset-0 w-full h-full object-cover" />
+              <img src={product.image_url} alt={product.name} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
             ) : (
               <div className="absolute inset-0 flex items-center justify-center text-gray-300 font-bold bg-gray-100">NO IMG</div>
             )}
@@ -93,9 +99,9 @@ export default function ProductDetail() {
             <div className="text-hitam"><span className="font-bold">{fakeSold}</span> Terjual</div>
           </div>
 
-          <div className="bg-gray-50 p-4 mb-6">
-            <div className="text-3xl font-bold text-emas flex items-center gap-2">
-              Rp{product.price.toLocaleString('id-ID')}
+          <div className="bg-gradient-to-r from-gray-50 to-white p-6 rounded-2xl border border-gray-100 mb-8 shadow-sm">
+            <div className="text-3xl font-bold text-hitam-gelap flex items-center gap-2">
+              Rp {product.price.toLocaleString('id-ID')}
             </div>
           </div>
 
@@ -111,21 +117,21 @@ export default function ProductDetail() {
             <div className="flex items-center gap-6">
               <span className="text-gray-500 w-24 shrink-0 text-sm">Kuantitas</span>
               <div className="flex items-center gap-4">
-                <div className="flex items-center border border-gray-300 rounded-sm overflow-hidden">
+                <div className="flex items-center border border-gray-200 rounded-full overflow-hidden bg-white shadow-sm">
                   <button 
                     onClick={() => setQuantity(Math.max(1, quantity - 1))} 
-                    className="w-8 h-8 flex items-center justify-center bg-gray-50 text-gray-600 hover:bg-gray-100"
+                    className="w-10 h-10 flex items-center justify-center bg-gray-50 text-gray-600 hover:bg-gray-100 hover:text-emas transition-colors"
                   >-</button>
                   <input 
                     type="text" 
                     value={quantity} 
                     readOnly
-                    className="w-12 h-8 text-center text-hitam border-x border-gray-300 outline-none"
+                    className="w-12 h-10 text-center font-medium text-hitam border-x border-gray-100 outline-none bg-white"
                   />
                   <button 
                     onClick={() => setQuantity(quantity + 1)} 
                     disabled={quantity >= product.stock}
-                    className="w-8 h-8 flex items-center justify-center bg-gray-50 text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+                    className="w-10 h-10 flex items-center justify-center bg-gray-50 text-gray-600 hover:bg-gray-100 hover:text-emas transition-colors disabled:opacity-50"
                   >+</button>
                 </div>
                 <span className="text-sm text-gray-500">Tersisa {product.stock} buah</span>
@@ -137,7 +143,7 @@ export default function ProductDetail() {
             <button 
               onClick={handleBuyNow}
               disabled={product.stock <= 0}
-              className="w-full bg-emas text-hitam border border-emas py-4 font-bold text-lg hover:bg-hitam hover:text-emas transition-colors disabled:opacity-50"
+              className="w-full bg-gradient-to-r from-emas to-yellow-400 text-hitam py-4 rounded-full font-bold text-lg hover:-translate-y-1 hover:shadow-[0_10px_20px_rgba(212,168,73,0.3)] transition-all duration-300 disabled:opacity-50 disabled:hover:translate-y-0"
             >
               Beli Sekarang
             </button>
@@ -146,11 +152,11 @@ export default function ProductDetail() {
       </div>
 
       {/* Description & Store Info */}
-      <div className="bg-white shadow-sm mb-6">
-        <div className="p-4 bg-gray-50 border-b border-gray-100">
-          <h2 className="text-lg font-medium text-hitam uppercase">Spesifikasi & Deskripsi Produk</h2>
+      <div className="bg-white rounded-3xl shadow-soft border border-gray-100 overflow-hidden mb-10">
+        <div className="p-6 md:p-8 bg-gray-50/50 border-b border-gray-100">
+          <h2 className="text-lg font-bold text-hitam-gelap uppercase tracking-wide">Spesifikasi & Deskripsi Produk</h2>
         </div>
-        <div className="p-6 text-sm text-hitam">
+        <div className="p-6 md:p-8 text-sm text-gray-700">
           <div className="grid grid-cols-2 max-w-sm gap-y-4 mb-8">
             <div className="text-gray-500">Kategori</div>
             <div><Link to={`/products?category=${product.categories?.slug}`} className="text-emas">{product.categories?.name}</Link></div>
