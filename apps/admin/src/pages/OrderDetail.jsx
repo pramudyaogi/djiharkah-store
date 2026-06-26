@@ -111,13 +111,15 @@ export default function OrderDetail() {
           {/* Progress Tracker */}
           {!isCancelled && (
             <div className="bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl p-6 shadow-sm">
-              <h3 className="text-sm font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider mb-6">Status Pemrosesan</h3>
+              <h3 className="text-sm font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider mb-8">Status Pemrosesan</h3>
               
-              <div className="relative flex justify-between items-center">
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-gray-200 dark:bg-zinc-800 rounded-full z-0"></div>
+              <div className="relative flex justify-between items-start px-5">
+                {/* Background line */}
+                <div className="absolute left-5 right-5 top-5 h-0.5 bg-gray-200 dark:bg-zinc-800 z-0"></div>
+                {/* Progress fill line */}
                 <div 
-                  className="absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-yellow-500 rounded-full z-0 transition-all duration-500"
-                  style={{ width: `${(Math.max(0, statusIndex) / 3) * 100}%` }}
+                  className="absolute left-5 top-5 h-0.5 bg-yellow-500 z-0 transition-all duration-500"
+                  style={{ width: `${statusIndex <= 0 ? 0 : statusIndex >= 2 ? 'calc(100% - 40px)' : '50%'}` }}
                 ></div>
 
                 {[
@@ -130,13 +132,17 @@ export default function OrderDetail() {
                   const isCurrent = statusIndex === idx;
                   
                   return (
-                    <div key={step.id} className="relative z-10 flex flex-col items-center gap-2">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-colors ${
-                        isCompleted ? 'bg-yellow-500 border-yellow-500 text-black shadow-[0_0_15px_rgba(234,179,8,0.3)]' : 'bg-gray-50 dark:bg-zinc-900 border-gray-300 dark:border-zinc-700 text-gray-400 dark:text-zinc-500'
+                    <div key={step.id} className="relative z-10 flex flex-col items-center gap-3 w-16">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${
+                        isCompleted 
+                          ? 'bg-yellow-500 border-yellow-500 text-black shadow-[0_0_15px_rgba(234,179,8,0.3)]' 
+                          : 'bg-white dark:bg-zinc-950 border-gray-300 dark:border-zinc-700 text-gray-400 dark:text-zinc-600'
                       }`}>
                         <Icon size={18} />
                       </div>
-                      <span className={`text-xs font-medium ${isCurrent ? 'text-yellow-500' : isCompleted ? 'text-gray-700 dark:text-zinc-300' : 'text-gray-400 dark:text-zinc-600'}`}>
+                      <span className={`text-xs font-semibold text-center leading-tight ${
+                        isCurrent ? 'text-yellow-500' : isCompleted ? 'text-gray-700 dark:text-zinc-300' : 'text-gray-400 dark:text-zinc-600'
+                      }`}>
                         {step.label}
                       </span>
                     </div>
