@@ -91,68 +91,68 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-8 pb-10">
+    <div className="space-y-6 md:space-y-8 pb-10">
       <div>
-        <h3 className="text-2xl font-playfair font-bold leading-6 text-gray-900 dark:text-white tracking-wide">Ringkasan Penjualan</h3>
-        <p className="mt-3 text-sm text-gray-500 dark:text-zinc-400">
+        <h3 className="text-xl md:text-2xl font-playfair font-bold leading-6 text-gray-900 dark:text-white tracking-wide">Ringkasan Penjualan</h3>
+        <p className="mt-2 text-sm text-gray-500 dark:text-zinc-400">
           Pantau performa penjualan dan status pesanan toko Anda secara keseluruhan.
         </p>
       </div>
       
       {/* Sales Metrics Cards */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:gap-6 lg:grid-cols-4">
         {/* Revenue */}
-        <div className="bg-white dark:bg-zinc-900/40 backdrop-blur-md overflow-hidden rounded-2xl border border-gray-200 dark:border-zinc-800/60 p-6 flex flex-col justify-center transition-all duration-300 hover:border-emas/30 hover:shadow-glow relative group">
+        <div className="bg-white dark:bg-zinc-900/40 backdrop-blur-md overflow-hidden rounded-2xl border border-gray-200 dark:border-zinc-800/60 p-4 md:p-6 flex flex-col justify-center transition-all duration-300 hover:border-emas/30 hover:shadow-glow relative group">
           <div className="absolute top-0 inset-x-4 h-px bg-gradient-to-r from-transparent via-emas/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-          <div className="flex items-center gap-4 mb-4">
-            <div className="p-3 bg-green-500/10 rounded-xl text-green-500">
-              <DollarSign size={24} />
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 md:p-3 bg-green-500/10 rounded-xl text-green-500">
+              <DollarSign size={20} />
             </div>
-            <dt className="text-sm font-semibold text-gray-500 dark:text-zinc-400 tracking-wider">Total Pendapatan</dt>
+            <dt className="text-xs md:text-sm font-semibold text-gray-500 dark:text-zinc-400 tracking-wider">Total Pendapatan</dt>
           </div>
-          <dd className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-br from-gray-900 to-gray-500 dark:from-white dark:to-zinc-300 group-hover:to-emas transition-colors duration-300">
+          <dd className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-br from-gray-900 to-gray-500 dark:from-white dark:to-zinc-300 group-hover:to-emas transition-colors duration-300 truncate">
             {formatRupiah(stats.revenue)}
           </dd>
         </div>
 
         {/* Total Orders */}
-        <div className="bg-white dark:bg-zinc-900/40 backdrop-blur-md overflow-hidden rounded-2xl border border-gray-200 dark:border-zinc-800/60 p-6 flex flex-col justify-center transition-all duration-300 hover:border-emas/30 hover:shadow-glow relative group">
+        <div className="bg-white dark:bg-zinc-900/40 backdrop-blur-md overflow-hidden rounded-2xl border border-gray-200 dark:border-zinc-800/60 p-4 md:p-6 flex flex-col justify-center transition-all duration-300 hover:border-emas/30 hover:shadow-glow relative group">
           <div className="absolute top-0 inset-x-4 h-px bg-gradient-to-r from-transparent via-emas/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-          <div className="flex items-center gap-4 mb-4">
-            <div className="p-3 bg-blue-500/10 rounded-xl text-blue-500">
-              <ShoppingBag size={24} />
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 md:p-3 bg-blue-500/10 rounded-xl text-blue-500">
+              <ShoppingBag size={20} />
             </div>
-            <dt className="text-sm font-semibold text-gray-500 dark:text-zinc-400 tracking-wider">Total Pesanan</dt>
+            <dt className="text-xs md:text-sm font-semibold text-gray-500 dark:text-zinc-400 tracking-wider">Total Pesanan</dt>
           </div>
-          <dd className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-br from-gray-900 to-gray-500 dark:from-white dark:to-zinc-300 group-hover:to-emas transition-colors duration-300">
+          <dd className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-br from-gray-900 to-gray-500 dark:from-white dark:to-zinc-300 group-hover:to-emas transition-colors duration-300">
             {stats.totalOrders}
           </dd>
         </div>
 
         {/* Avg Order Value */}
-        <div className="bg-white dark:bg-zinc-900/40 backdrop-blur-md overflow-hidden rounded-2xl border border-gray-200 dark:border-zinc-800/60 p-6 flex flex-col justify-center transition-all duration-300 hover:border-emas/30 hover:shadow-glow relative group">
+        <div className="bg-white dark:bg-zinc-900/40 backdrop-blur-md overflow-hidden rounded-2xl border border-gray-200 dark:border-zinc-800/60 p-4 md:p-6 flex flex-col justify-center transition-all duration-300 hover:border-emas/30 hover:shadow-glow relative group">
           <div className="absolute top-0 inset-x-4 h-px bg-gradient-to-r from-transparent via-emas/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-          <div className="flex items-center gap-4 mb-4">
-            <div className="p-3 bg-purple-500/10 rounded-xl text-purple-500">
-              <TrendingUp size={24} />
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 md:p-3 bg-purple-500/10 rounded-xl text-purple-500">
+              <TrendingUp size={20} />
             </div>
-            <dt className="text-sm font-semibold text-gray-500 dark:text-zinc-400 tracking-wider">Rata-rata Pesanan</dt>
+            <dt className="text-xs md:text-sm font-semibold text-gray-500 dark:text-zinc-400 tracking-wider">Rata-rata Pesanan</dt>
           </div>
-          <dd className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-br from-gray-900 to-gray-500 dark:from-white dark:to-zinc-300 group-hover:to-emas transition-colors duration-300 truncate">
+          <dd className="text-xl md:text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-br from-gray-900 to-gray-500 dark:from-white dark:to-zinc-300 group-hover:to-emas transition-colors duration-300 truncate">
             {formatRupiah(stats.avgOrderValue)}
           </dd>
         </div>
 
         {/* Items Sold */}
-        <div className="bg-white dark:bg-zinc-900/40 backdrop-blur-md overflow-hidden rounded-2xl border border-gray-200 dark:border-zinc-800/60 p-6 flex flex-col justify-center transition-all duration-300 hover:border-emas/30 hover:shadow-glow relative group">
+        <div className="bg-white dark:bg-zinc-900/40 backdrop-blur-md overflow-hidden rounded-2xl border border-gray-200 dark:border-zinc-800/60 p-4 md:p-6 flex flex-col justify-center transition-all duration-300 hover:border-emas/30 hover:shadow-glow relative group">
           <div className="absolute top-0 inset-x-4 h-px bg-gradient-to-r from-transparent via-emas/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-          <div className="flex items-center gap-4 mb-4">
-            <div className="p-3 bg-emas/10 rounded-xl text-emas">
-              <Package size={24} />
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 md:p-3 bg-emas/10 rounded-xl text-emas">
+              <Package size={20} />
             </div>
-            <dt className="text-sm font-semibold text-gray-500 dark:text-zinc-400 tracking-wider">Barang Terjual</dt>
+            <dt className="text-xs md:text-sm font-semibold text-gray-500 dark:text-zinc-400 tracking-wider">Barang Terjual</dt>
           </div>
-          <dd className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-br from-gray-900 to-gray-500 dark:from-white dark:to-zinc-300 group-hover:to-emas transition-colors duration-300">
+          <dd className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-br from-gray-900 to-gray-500 dark:from-white dark:to-zinc-300 group-hover:to-emas transition-colors duration-300">
             {stats.itemsSold}
           </dd>
         </div>

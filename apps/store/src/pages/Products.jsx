@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, SlidersHorizontal, X } from 'lucide-react';
 
 export default function Products() {
   const [products, setProducts] = useState([]);
@@ -9,6 +9,7 @@ export default function Products() {
   const [loading, setLoading] = useState(true);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const [filterOpen, setFilterOpen] = useState(false);
   
   const categoryFilter = searchParams.get('category');
 
@@ -41,17 +42,52 @@ export default function Products() {
   }, [categoryFilter]);
 
   return (
-    <div className="w-full max-w-[1400px] mx-auto pt-6 px-4 flex flex-col md:flex-row gap-6 lg:gap-8 pb-20">
+    <div className="w-full max-w-[1400px] mx-auto pt-4 md:pt-6 px-4 flex flex-col md:flex-row gap-4 md:gap-6 lg:gap-8 pb-20">
 
-      {/* Back Button */}
-      <div className="w-full md:hidden mb-2">
+      {/* Mobile: Back Button + Filter Toggle */}
+      <div className="flex items-center justify-between md:hidden mb-1">
         <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-gray-500 hover:text-emas transition-colors group">
           <ChevronLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
           Kembali
         </button>
+        <button
+          onClick={() => setFilterOpen(!filterOpen)}
+          className="flex items-center gap-2 text-sm font-bold text-gray-600 bg-white border border-gray-200 px-4 py-2 rounded-xl shadow-sm hover:border-emas hover:text-emas transition-all"
+        >
+          <SlidersHorizontal size={15} />
+          Filter
+          {categoryFilter && <span className="w-2 h-2 rounded-full bg-emas inline-block"></span>}
+        </button>
       </div>
-      {/* Sidebar Filters (Marketplace style) */}
-      <aside className="w-full md:w-56 shrink-0">
+
+      {/* Mobile Filter Drawer */}
+      {filterOpen && (
+        <div className="md:hidden bg-white rounded-2xl shadow-soft border border-gray-100 p-5 mb-2">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-hitam uppercase tracking-widest">Filter Kategori</h3>
+            <button onClick={() => setFilterOpen(false)} className="text-gray-400 hover:text-hitam"><X size={18} /></button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => { setSearchParams({}); setFilterOpen(false); }}
+              className={`px-4 py-2 rounded-xl text-sm transition-all duration-300 ${ !categoryFilter ? 'bg-orange-50/80 text-emas font-bold border border-emas/20' : 'bg-gray-50 text-gray-600 border border-gray-100 font-medium'}`}
+            >
+              Semua
+            </button>
+            {categories.map(cat => (
+              <button
+                key={cat.id}
+                onClick={() => { setSearchParams({ category: cat.slug }); setFilterOpen(false); }}
+                className={`px-4 py-2 rounded-xl text-sm transition-all duration-300 ${ categoryFilter === cat.slug ? 'bg-orange-50/80 text-emas font-bold border border-emas/20' : 'bg-gray-50 text-gray-600 border border-gray-100 font-medium'}`}
+              >
+                {cat.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {/* Sidebar Filters - Desktop only */}
+      <aside className="w-full md:w-56 shrink-0 hidden md:block">
         <div className="bg-white p-6 rounded-3xl shadow-soft border border-gray-100 sticky top-24">
           <h3 className="text-base font-bold text-hitam mb-4 uppercase flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
