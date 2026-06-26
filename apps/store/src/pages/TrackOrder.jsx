@@ -1,0 +1,253 @@
+import React, { useState, useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+import { Package, Truck, CheckCircle, Clock, Search, AlertCircle } from 'lucide-react';
+
+export default function TrackOrder() {
+  const [searchParams] = useSearchParams();
+  const initialCode = searchParams.get('code') || '';
+  
+  const [trackingCode, setTrackingCode] = useState(initialCode);
+  const [order, setOrder] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (initialCode) {
+      handleSearch(null, initialCode);
+    }
+  }, [initialCode]);
+
+  const handleSearch = async (e, code = trackingCode) => {
+    if (e) e.preventDefault();
+    if (!code.trim()) return;
+    
+    setLoading(true);
+    setError('');
+    setOrder(null);
+
+    try {
+      const { data, error } = await supabase.rpc('track_order', {
+        p_tracking_code: code.trim()
+      });
+
+      if (error) throw error;
+      if (!data) {
+        throw new Error("Pesanan dengan kode resi tersebut tidak ditemukan.");
+      }
+
+      setOrder(data);
+    } catch (err) {
+      setError(err.message || 'Gagal melacak pesanan.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getStatusDisplay = (status) => {
+    switch(status) {
+      case 'pending':
+        return { label: 'Menunggu Konfirmasi', icon: <Clock size={40} />, color: 'text-yellow-500', bg: 'bg-yellow-50' };
+      case 'processing':
+        return { label: 'Sedang Dikemas', icon: <Package size={40} />, color: 'text-blue-500', bg: 'bg-blue-50' };
+      case 'shipped':
+        return { label: 'Dalam Pengiriman', icon: <Truck size={40} />, color: 'text-purple-500', bg: 'bg-purple-50' };
+      case 'delivered':
+        return { label: 'Selesai', icon: <CheckCircle size={40} />, color: 'text-green-500', bg: 'bg-green-50' };
+      case 'cancelled':
+        return { label: 'Dibatalkan', icon: <AlertCircle size={40} />, color: 'text-red-500', bg: 'bg-red-50' };
+      default:
+        return { label: status, icon: <Package size={40} />, color: 'text-gray-500', bg: 'bg-gray-50' };
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto py-12 px-4 min-h-[70vh]">
+      <h1 className="text-3xl font-playfair font-bold text-hitam mb-2 text-center">Lacak Pesanan Anda</h1>
+      <p className="text-center text-gray-500 mb-10">Masukkan kode resi yang Anda dapatkan saat checkout.</p>
+      
+      {/* Search Bar */}
+      <div className="max-w-xl mx-auto mb-12">
+        <form onSubmit={handleSearch} className="flex relative">
+          <input 
+            type="text" 
+            value={trackingCode}
+            onChange={(e) => setTrackingCode(e.target.value.toUpperCase())}
+            placeholder="Contoh: ORD-240626-A1B2" 
+            className="w-full px-6 py-4 pr-32 text-lg font-mono tracking-widest bg-white border-2 border-gray-200 rounded-full focus:outline-none focus:border-emas transition-colors uppercase shadow-sm"
+          />
+          <button 
+            type="submit"
+            disabled={loading || !trackingCode}
+            className="absolute right-2 top-2 bottom-2 px-6 bg-emas text-hitam font-bold rounded-full hover:bg-hitam hover:text-emas transition-colors flex items-center gap-2 disabled:opacity-50"
+          >
+            {loading ? 'Mencari...' : <><Search size={18} /> CARI</>}
+          </button>
+        </form>
+        {error && (
+          <div className="mt-4 text-center text-red-500 bg-red-50 py-2 rounded-lg text-sm flex items-center justify-center gap-2">
+            <AlertCircle size={16} /> {error}
+          </div>
+        )}
+      </div>
+
+      {/* Result Section */}
+      {order && (
+        <div className="bg-white border border-gray-100 rounded-3xl shadow-soft overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+          
+          {/* Header */}
+          <div className="bg-gray-50 p-6 md:p-8 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <p className="text-sm text-gray-500 mb-1 font-medium">KODE RESI</p>
+              <h2 className="text-2xl font-mono font-bold text-hitam tracking-wider">{order.tracking_code}</h2>
+            </div>
+            <div className="text-left md:text-right">
+              <p className="text-sm text-gray-500 mb-1 font-medium">TANGGAL PEMESANAN</p>
+              <p className="text-hitam font-medium">
+                {new Date(order.created_at).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              </p>
+            </div>
+          </div>
+
+          <div className="p-6 md:p-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+              
+              {/* Left Column: Status & Info */}
+              <div>
+                <h3 className="font-playfair font-bold text-lg text-hitam mb-6">Status Pesanan</h3>
+                
+                <div className={`p-6 rounded-2xl border border-gray-100 flex items-center gap-6 mb-8 ${getStatusDisplay(order.status).bg}`}>
+                  <div className={getStatusDisplay(order.status).color}>
+                    {getStatusDisplay(order.status).icon}
+                  </div>
+                  <div>
+                    <h4 className={`text-xl font-bold ${getStatusDisplay(order.status).color}`}>
+                      {getStatusDisplay(order.status).label}
+                    </h4>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {order.status === 'pending' && 'Pesanan sedang menunggu konfirmasi admin.'}
+                      {order.status === 'processing' && 'Tim kami sedang mengemas pesanan Anda.'}
+                      {order.status === 'shipped' && 'Pesanan Anda sedang dalam perjalanan ke alamat tujuan.'}
+                      {order.status === 'delivered' && 'Pesanan telah diterima. Terima kasih!'}
+                      {order.status === 'cancelled' && 'Pesanan dibatalkan oleh admin.'}
+                    </p>
+                  </div>
+                </div>
+
+                {order.status === 'cancelled' && (
+                  <div className="bg-red-50 p-6 rounded-2xl border border-red-100 mb-8">
+                    <h4 className="text-red-700 font-bold mb-2 flex items-center gap-2">
+                      <AlertCircle size={18} /> Alasan Pembatalan:
+                    </h4>
+                    <p className="text-red-600/90 text-sm mb-4">
+                      {order.cancel_reason || 'Tidak ada alasan yang diberikan.'}
+                    </p>
+                    <div className="bg-white p-4 rounded-xl border border-red-100">
+                      <p className="text-sm text-gray-700 font-medium">Instruksi Pengembalian Dana (Refund)</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Silakan hubungi admin kami via WhatsApp dan berikan rincian Bank/Rekening Anda untuk proses pengembalian dana secepatnya.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {order.tracking_number && (
+                  <div className="bg-purple-50 p-6 rounded-2xl border border-purple-100 mb-8 flex flex-col items-center justify-center text-center relative overflow-hidden">
+                    {/* Decorative Background Icon */}
+                    <Truck className="absolute -right-4 -bottom-4 text-purple-100 opacity-50" size={100} />
+                    
+                    <div className="relative z-10 w-full">
+                      <p className="text-sm font-bold text-purple-600 uppercase tracking-wider mb-1">
+                        Dikirim via {order.courier || 'Kurir Ekspedisi'}
+                      </p>
+                      
+                      <div className="bg-white px-6 py-4 rounded-xl shadow-sm border border-purple-100 my-4 inline-flex items-center gap-4">
+                        <div className="text-left">
+                          <span className="text-xs text-gray-500 block mb-1">Nomor Resi:</span>
+                          <span className="text-2xl font-mono font-bold text-hitam tracking-wider select-all">{order.tracking_number}</span>
+                        </div>
+                        <button 
+                          onClick={() => {
+                            navigator.clipboard.writeText(order.tracking_number);
+                            alert('Resi berhasil disalin!');
+                          }}
+                          className="bg-purple-100 text-purple-600 p-2 rounded-lg hover:bg-purple-200 transition-colors"
+                          title="Salin Resi"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                        </button>
+                      </div>
+
+                      <a 
+                        href={`https://cekresi.com/?noresi=${order.tracking_number}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 bg-purple-600 text-white px-6 py-2.5 rounded-full font-medium hover:bg-purple-700 transition-colors shadow-sm"
+                      >
+                        Lacak Paket di CekResi <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                      </a>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-6">
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">Informasi Penerima</h4>
+                    <p className="text-hitam font-medium">{order.customer_name}</p>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">Alamat Pengiriman</h4>
+                    <p className="text-gray-700 leading-relaxed whitespace-pre-line">{order.shipping_address}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Items */}
+              <div>
+                <h3 className="font-playfair font-bold text-lg text-hitam mb-6">Rincian Produk</h3>
+                
+                <div className="space-y-4 mb-6">
+                  {order.items && order.items.map((item, idx) => (
+                    <div key={idx} className="flex gap-4 p-4 border border-gray-100 rounded-xl hover:shadow-sm transition-shadow">
+                      <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden shrink-0">
+                        {item.image_url ? (
+                          <img src={item.image_url} alt={item.product_name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">NO IMG</div>
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-medium text-hitam text-sm mb-1">{item.product_name}</h4>
+                        <div className="flex justify-between items-end">
+                          <p className="text-sm text-gray-500">{item.quantity} x Rp {item.unit_price.toLocaleString('id-ID')}</p>
+                          <p className="font-bold text-hitam">Rp {(item.quantity * item.unit_price).toLocaleString('id-ID')}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-gray-50 p-6 rounded-xl border border-gray-100">
+                  <div className="flex justify-between items-center mb-2 text-sm text-gray-600">
+                    <span>Subtotal</span>
+                    <span>Rp {order.total_amount.toLocaleString('id-ID')}</span>
+                  </div>
+                  <div className="flex justify-between items-center mb-4 text-sm text-gray-600">
+                    <span>Ongkos Kirim</span>
+                    <span className="text-green-600 font-medium">Gratis</span>
+                  </div>
+                  <div className="w-full h-px bg-gray-200 mb-4"></div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-hitam">Total Pembayaran</span>
+                    <span className="text-2xl font-bold text-emas">Rp {order.total_amount.toLocaleString('id-ID')}</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -3,7 +3,59 @@
 @tailwind utilities;
 
 @layer base {
-  body {
-    @apply bg-gray-50 text-gray-900;
+  html {
+    scroll-behavior: smooth;
   }
+  body {
+    @apply bg-white dark:bg-[#09090b] text-gray-900 dark:text-zinc-300 selection:text-black;
+    font-family: 'Inter', sans-serif;
+  }
+  body ::selection {
+    background-color: #d4a849;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Playfair Display', serif;
+  }
+}
+
+
+
+@layer utilities {
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.3);
+  border-radius: 10px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background-color: rgba(63, 63, 70, 0.5);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(156, 163, 175, 0.5);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(63, 63, 70, 0.8);
+}
+
+::-webkit-scrollbar-button {
+  display: none !important;
 }

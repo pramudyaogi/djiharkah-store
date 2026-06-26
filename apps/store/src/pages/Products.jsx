@@ -14,7 +14,7 @@ export default function Products() {
     async function fetchData() {
       setLoading(true);
       try {
-        const { data: catData } = await supabase.from('categories').select('*').order('name');
+        const { data: catData } = await supabase.from('categories').select('*').order('display_order', { ascending: true }).order('name');
         setCategories(catData || []);
 
         let query = supabase.from('products').select('*, categories(name, slug)').eq('is_active', true);
@@ -39,7 +39,7 @@ export default function Products() {
   }, [categoryFilter]);
 
   return (
-    <div className="max-w-[1200px] mx-auto pt-6 px-4 flex flex-col md:flex-row gap-4">
+    <div className="w-full max-w-[1400px] mx-auto pt-6 px-4 flex flex-col md:flex-row gap-4">
       {/* Sidebar Filters (Marketplace style) */}
       <aside className="w-full md:w-48 shrink-0">
         <div className="bg-white p-4 shadow-sm">

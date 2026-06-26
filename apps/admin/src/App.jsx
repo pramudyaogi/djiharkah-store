@@ -5,7 +5,13 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
-import Customers from './pages/Customers';
+import ProductsList from './pages/ProductsList';
+import ProductForm from './pages/ProductForm';
+import Categories from './pages/Categories';
+import OrdersList from './pages/OrdersList';
+import OrderDetail from './pages/OrderDetail';
+import Reviews from './pages/Reviews';
+import Settings from './pages/Settings';
 
 function AppRoutes() {
   const { user, role } = useAuth();
@@ -20,9 +26,14 @@ function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
           <Route path="/" element={<Dashboard />} />
-          <Route path="/products" element={<div className="p-8 text-zinc-400 bg-zinc-900/50 rounded-2xl border border-zinc-800">Products Management Placeholder</div>} />
-          <Route path="/orders" element={<div className="p-8 text-zinc-400 bg-zinc-900/50 rounded-2xl border border-zinc-800">Orders Management Placeholder</div>} />
-          <Route path="/customers" element={<Customers />} />
+          <Route path="/products" element={<ProductsList />} />
+          <Route path="/products/create" element={<ProductForm />} />
+          <Route path="/products/edit/:id" element={<ProductForm />} />
+          <Route path="/categories" element={<Categories />} />
+          <Route path="/orders" element={<OrdersList />} />
+          <Route path="/orders/:id" element={<OrderDetail />} />
+          <Route path="/reviews" element={<Reviews />} />
+          <Route path="/settings" element={<Settings />} />
         </Route>
       </Route>
       

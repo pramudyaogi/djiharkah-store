@@ -2,10 +2,22 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 2. Create Custom Types
+DROP TYPE IF EXISTS user_role CASCADE;
 CREATE TYPE user_role AS ENUM ('admin', 'customer');
+
+DROP TYPE IF EXISTS order_status CASCADE;
 CREATE TYPE order_status AS ENUM ('pending', 'processing', 'shipped', 'delivered', 'cancelled');
 
 -- 3. Create Tables
+
+-- Bersihkan tabel yang sudah ada agar tidak error "already exists" saat dijalankan ulang
+DROP TABLE IF EXISTS public.cart_items CASCADE;
+DROP TABLE IF EXISTS public.carts CASCADE;
+DROP TABLE IF EXISTS public.order_items CASCADE;
+DROP TABLE IF EXISTS public.orders CASCADE;
+DROP TABLE IF EXISTS public.products CASCADE;
+DROP TABLE IF EXISTS public.categories CASCADE;
+DROP TABLE IF EXISTS public.profiles CASCADE;
 
 -- PROFILES (Extends auth.users)
 CREATE TABLE public.profiles (
@@ -175,6 +187,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
@@ -197,6 +210,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS on_order_item_inserted ON public.order_items;
 CREATE TRIGGER on_order_item_inserted
   AFTER INSERT ON public.order_items
   FOR EACH ROW EXECUTE FUNCTION public.handle_order_item_insertion();
@@ -211,8 +225,29 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Apply updated_at triggers
+DROP TRIGGER IF EXISTS set_profiles_updated_at ON public.profiles;
 CREATE TRIGGER set_profiles_updated_at BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+DROP TRIGGER IF EXISTS set_products_updated_at ON public.products;
 CREATE TRIGGER set_products_updated_at BEFORE UPDATE ON public.products FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+DROP TRIGGER IF EXISTS set_orders_updated_at ON public.orders;
 CREATE TRIGGER set_orders_updated_at BEFORE UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+DROP TRIGGER IF EXISTS set_carts_updated_at ON public.carts;
 CREATE TRIGGER set_carts_updated_at BEFORE UPDATE ON public.carts FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+DROP TRIGGER IF EXISTS set_cart_items_updated_at ON public.cart_items;
 CREATE TRIGGER set_cart_items_updated_at BEFORE UPDATE ON public.cart_items FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- 7. Sinkronisasi User Lama (PENTING JIKA ANDA SUDAH PUNYA AKUN SEBELUMNYA)
+-- Jika Anda sudah pernah mendaftar sebelum tabel profiles ini dibuat/direset,
+-- kode di bawah ini akan memastikan akun Anda terdaftar sebagai admin di tabel profiles yang baru.
+INSERT INTO public.profiles (id, role, full_name)
+SELECT 
+  id, 
+  CASE WHEN email = 'admin@djiharkah.com' THEN 'admin'::public.user_role ELSE 'customer'::public.user_role END,
+  raw_user_meta_data->>'full_name'
+FROM auth.users
+ON CONFLICT (id) DO UPDATE 
+SET role = EXCLUDED.role;

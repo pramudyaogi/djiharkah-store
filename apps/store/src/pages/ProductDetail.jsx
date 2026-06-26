@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import useCartStore from '../store/useCartStore';
-import { Store, Star, Share2, Heart, ShieldCheck, ShoppingCart } from 'lucide-react';
+import { Store, Star, Share2, Heart, ShieldCheck, ShoppingCart, User, AlertCircle } from 'lucide-react';
+import PopupModal from '../components/PopupModal';
 
 export default function ProductDetail() {
   const { slug } = useParams();
@@ -10,27 +10,40 @@ export default function ProductDetail() {
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
-  const addItem = useCartStore(state => state.addItem);
+
+  // Popup Modal State
+  const [modalConfig, setModalConfig] = useState({ 
+    isOpen: false, type: 'info', title: '', message: '', actionText: '', actionLink: '' 
+  });
+  
+  const showModal = (config) => setModalConfig({ ...config, isOpen: true });
+  const closeModal = () => setModalConfig({ ...modalConfig, isOpen: false });
 
   useEffect(() => {
-    async function fetchProduct() {
+    async function fetchProductAndReviews() {
       try {
-        const { data, error } = await supabase
+        setLoading(true);
+        // Fetch Product
+        const { data: prodData, error: prodError } = await supabase
           .from('products')
           .select('*, categories(name, slug)')
           .eq('slug', slug)
           .single();
         
-        if (error) throw error;
-        setProduct(data);
+        if (prodError) throw prodError;
+        setProduct(prodData);
       } catch (error) {
-        console.error('Error fetching product:', error);
+        console.error('Error fetching data:', error);
       } finally {
         setLoading(false);
       }
     }
-    fetchProduct();
+    fetchProductAndReviews();
   }, [slug]);
+
+  const handleBuyNow = () => {
+    navigate('/checkout', { state: { product, quantity } });
+  };
 
   if (loading) return (
     <div className="flex justify-center py-32">
@@ -41,20 +54,6 @@ export default function ProductDetail() {
 
   const fakeSold = Math.floor(product.id.charCodeAt(0) * 1.5) + 12;
   const fakeRating = (Math.random() * (5 - 4.5) + 4.5).toFixed(1);
-
-  const handleAddToCart = () => {
-    for(let i=0; i<quantity; i++) {
-      addItem(product);
-    }
-    alert('Produk ditambahkan ke keranjang');
-  };
-
-  const handleBuyNow = () => {
-    for(let i=0; i<quantity; i++) {
-      addItem(product);
-    }
-    navigate('/cart');
-  };
 
   return (
     <div className="max-w-[1200px] mx-auto pt-6 px-4 pb-20">
@@ -77,10 +76,6 @@ export default function ProductDetail() {
               <div className="absolute inset-0 flex items-center justify-center text-gray-300 font-bold bg-gray-100">NO IMG</div>
             )}
           </div>
-          <div className="flex justify-center gap-4 mt-4 text-hitam">
-            <button className="flex items-center gap-2 hover:text-emas text-sm"><Share2 size={16}/> Bagikan</button>
-            <button className="flex items-center gap-2 hover:text-emas text-sm"><Heart size={16}/> Favoritkan</button>
-          </div>
         </div>
 
         {/* Right: Info */}
@@ -94,8 +89,6 @@ export default function ProductDetail() {
               <span className="font-bold">{fakeRating}</span>
               <div className="flex text-emas"><Star size={12} fill="currentColor"/><Star size={12} fill="currentColor"/><Star size={12} fill="currentColor"/><Star size={12} fill="currentColor"/><Star size={12} fill="currentColor"/></div>
             </div>
-            <div className="w-px h-4 bg-gray-300"></div>
-            <div className="text-hitam border-b border-gray-600 pb-0.5"><span className="font-bold">24</span> Penilaian</div>
             <div className="w-px h-4 bg-gray-300"></div>
             <div className="text-hitam"><span className="font-bold">{fakeSold}</span> Terjual</div>
           </div>
@@ -142,16 +135,9 @@ export default function ProductDetail() {
 
           <div className="flex gap-4">
             <button 
-              onClick={handleAddToCart}
-              disabled={product.stock <= 0}
-              className="w-48 bg-emas/10 text-emas border border-emas py-3 text-sm font-medium hover:bg-emas/20 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              <ShoppingCart size={18} /> Masukkan Keranjang
-            </button>
-            <button 
               onClick={handleBuyNow}
               disabled={product.stock <= 0}
-              className="w-48 bg-emas text-hitam border border-emas py-3 text-sm font-medium hover:bg-emas-terang transition-colors disabled:opacity-50"
+              className="w-full bg-emas text-hitam border border-emas py-4 font-bold text-lg hover:bg-hitam hover:text-emas transition-colors disabled:opacity-50"
             >
               Beli Sekarang
             </button>
@@ -159,44 +145,31 @@ export default function ProductDetail() {
         </div>
       </div>
 
-      {/* Store Info & Description */}
-      <div className="flex flex-col md:flex-row gap-4">
-        {/* Store Info Banner */}
-        <div className="w-full md:w-1/3 bg-white p-4 shadow-sm flex items-center gap-4 h-max">
-          <div className="w-16 h-16 bg-hitam rounded-full flex items-center justify-center text-emas shrink-0 border border-emas">
-            <Store size={28} />
-          </div>
-          <div className="flex-1 border-r border-gray-200 pr-4">
-            <h3 className="font-bold text-hitam mb-1 text-sm">Djiharkah Store</h3>
-            <p className="text-xs text-gray-500 mb-2">Aktif 5 menit lalu</p>
-            <div className="flex gap-2">
-              <button className="flex-1 border border-emas text-emas text-xs py-1 hover:bg-emas/10">Chat Sekarang</button>
-              <button className="flex-1 border border-gray-300 text-gray-600 text-xs py-1 hover:bg-gray-50">Kunjungi Toko</button>
-            </div>
-          </div>
+      {/* Description & Store Info */}
+      <div className="bg-white shadow-sm mb-6">
+        <div className="p-4 bg-gray-50 border-b border-gray-100">
+          <h2 className="text-lg font-medium text-hitam uppercase">Spesifikasi & Deskripsi Produk</h2>
         </div>
-
-        {/* Description */}
-        <div className="flex-1 bg-white shadow-sm">
-          <div className="p-4 bg-gray-50 border-b border-gray-100">
-            <h2 className="text-lg font-medium text-hitam uppercase">Spesifikasi & Deskripsi Produk</h2>
+        <div className="p-6 text-sm text-hitam">
+          <div className="grid grid-cols-2 max-w-sm gap-y-4 mb-8">
+            <div className="text-gray-500">Kategori</div>
+            <div><Link to={`/products?category=${product.categories?.slug}`} className="text-emas">{product.categories?.name}</Link></div>
+            <div className="text-gray-500">Stok</div>
+            <div>{product.stock}</div>
+            <div className="text-gray-500">Dikirim Dari</div>
+            <div>Kota Jakarta Selatan</div>
           </div>
-          <div className="p-6 text-sm text-hitam">
-            <div className="grid grid-cols-2 max-w-sm gap-y-4 mb-8">
-              <div className="text-gray-500">Kategori</div>
-              <div><Link to={`/products?category=${product.categories?.slug}`} className="text-emas">{product.categories?.name}</Link></div>
-              <div className="text-gray-500">Stok</div>
-              <div>{product.stock}</div>
-              <div className="text-gray-500">Dikirim Dari</div>
-              <div>Kota Jakarta Selatan</div>
-            </div>
-            
-            <div className="whitespace-pre-line leading-relaxed text-gray-700">
-              {product.description || "Tidak ada deskripsi rinci untuk produk ini."}
-            </div>
+          <div className="whitespace-pre-line leading-relaxed text-gray-700">
+            {product.description || "Tidak ada deskripsi rinci untuk produk ini."}
           </div>
         </div>
       </div>
+
+
+      <PopupModal 
+        {...modalConfig}
+        onClose={closeModal}
+      />
     </div>
   );
 }

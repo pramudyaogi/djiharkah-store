@@ -5,7 +5,14 @@ import { useAuth } from '../contexts/AuthContext';
 export default function ProtectedRoute() {
   const { user, role, loading } = useAuth();
 
-  if (loading) return <div className="flex h-screen items-center justify-center">Loading...</div>;
+  // Tampilkan loading jika status auth masih dicek ATAU role masih di-fetch (null)
+  if (loading || (user && role === null)) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50">
+        <div className="w-10 h-10 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
   
   if (!user) return <Navigate to="/login" replace />;
   

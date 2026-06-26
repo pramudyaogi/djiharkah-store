@@ -42,9 +42,10 @@ export const AuthProvider = ({ children }) => {
         .single();
       
       if (error) throw error;
-      setRole(data.role);
+      setRole(data.role || 'user');
     } catch (error) {
       console.error('Error fetching role:', error.message);
+      setRole('unauthorized'); // Mencegah infinite loading jika gagal fetch
     } finally {
       setLoading(false);
     }
