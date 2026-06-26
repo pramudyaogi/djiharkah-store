@@ -113,15 +113,7 @@ export default function OrderDetail() {
             <div className="bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl p-6 shadow-sm">
               <h3 className="text-sm font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider mb-8">Status Pemrosesan</h3>
               
-              <div className="relative flex justify-between items-start px-5">
-                {/* Background line */}
-                <div className="absolute left-5 right-5 top-5 h-0.5 bg-gray-200 dark:bg-zinc-800 z-0"></div>
-                {/* Progress fill line */}
-                <div 
-                  className="absolute left-5 top-5 h-0.5 bg-yellow-500 z-0 transition-all duration-500"
-                  style={{ width: `${statusIndex <= 0 ? 0 : statusIndex >= 2 ? 'calc(100% - 40px)' : '50%'}` }}
-                ></div>
-
+              <div className="flex items-center justify-center gap-0">
                 {[
                   { id: 'processing', label: 'Dikemas', icon: Package },
                   { id: 'shipped', label: 'Dikirim', icon: Truck },
@@ -130,22 +122,31 @@ export default function OrderDetail() {
                   const Icon = step.icon;
                   const isCompleted = statusIndex >= idx;
                   const isCurrent = statusIndex === idx;
-                  
+                  const isLineActive = statusIndex > idx;
+
                   return (
-                    <div key={step.id} className="relative z-10 flex flex-col items-center gap-3 w-16">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${
-                        isCompleted 
-                          ? 'bg-yellow-500 border-yellow-500 text-black shadow-[0_0_15px_rgba(234,179,8,0.3)]' 
-                          : 'bg-white dark:bg-zinc-950 border-gray-300 dark:border-zinc-700 text-gray-400 dark:text-zinc-600'
-                      }`}>
-                        <Icon size={18} />
+                    <React.Fragment key={step.id}>
+                      {/* Step Circle */}
+                      <div className="flex flex-col items-center gap-3">
+                        <div className={`w-11 h-11 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${
+                          isCompleted
+                            ? 'bg-yellow-500 border-yellow-500 text-black shadow-[0_0_18px_rgba(234,179,8,0.35)]'
+                            : 'bg-white dark:bg-zinc-950 border-gray-300 dark:border-zinc-700 text-gray-400 dark:text-zinc-600'
+                        }`}>
+                          <Icon size={18} />
+                        </div>
+                        <span className={`text-xs font-semibold text-center whitespace-nowrap ${
+                          isCurrent ? 'text-yellow-500' : isCompleted ? 'text-gray-700 dark:text-zinc-200' : 'text-gray-400 dark:text-zinc-600'
+                        }`}>
+                          {step.label}
+                        </span>
                       </div>
-                      <span className={`text-xs font-semibold text-center leading-tight ${
-                        isCurrent ? 'text-yellow-500' : isCompleted ? 'text-gray-700 dark:text-zinc-300' : 'text-gray-400 dark:text-zinc-600'
-                      }`}>
-                        {step.label}
-                      </span>
-                    </div>
+
+                      {/* Connector line between steps (not after the last one) */}
+                      {idx < 2 && (
+                        <div className={`flex-1 h-0.5 mb-6 mx-3 rounded-full transition-all duration-500 ${isLineActive ? 'bg-yellow-500' : 'bg-gray-200 dark:bg-zinc-700'}`} />
+                      )}
+                    </React.Fragment>
                   )
                 })}
               </div>
