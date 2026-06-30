@@ -85,6 +85,40 @@ export default function OrderDetail() {
   const statusIndex = ['processing', 'shipped', 'delivered'].indexOf(order.status);
   const isCancelled = order.status === 'cancelled';
 
+  // Parse guest contact info from shipping_address if order.profiles is empty
+  const getCustomerInfo = () => {
+    if (order.profiles) {
+      return {
+        name: order.profiles.full_name || 'Pelanggan',
+        phone: order.contact_phone || '-',
+        address: order.shipping_address || 'Tidak ada alamat pengiriman'
+      };
+    }
+    
+    // Parse guest format: p_name || ' - ' || p_phone || ' - ' || p_email || E'\n' || p_address
+    if (order.shipping_address) {
+      const parts = order.shipping_address.split('\n');
+      const firstLine = parts[0] || '';
+      const address = parts.slice(1).join('\n') || '';
+      const infoParts = firstLine.split(' - ');
+      if (infoParts.length >= 2) {
+        return {
+          name: infoParts[0],
+          phone: infoParts[1],
+          address: address
+        };
+      }
+    }
+    
+    return {
+      name: 'Guest User',
+      phone: order.contact_phone || '-',
+      address: order.shipping_address || 'Tidak ada alamat pengiriman'
+    };
+  };
+
+  const customerInfo = getCustomerInfo();
+
   return (
     <div className="space-y-6 pb-20">
       {/* Header */}
@@ -115,7 +149,7 @@ export default function OrderDetail() {
               
               <div className="flex items-center justify-center gap-0">
                 {[
-                  { id: 'processing', label: 'Dikemas', icon: Package },
+                  { id: 'processing', label: 'Diproses', icon: Package },
                   { id: 'shipped', label: 'Dikirim', icon: Truck },
                   { id: 'delivered', label: 'Selesai', icon: CheckCircle }
                 ].map((step, idx) => {
@@ -183,9 +217,22 @@ export default function OrderDetail() {
               ))}
             </div>
             
-            <div className="bg-white/50 dark:bg-zinc-950/50 p-5 border-t border-gray-200 dark:border-zinc-800 flex justify-between items-center">
-              <span className="text-gray-500 dark:text-zinc-400 font-medium">Total Pesanan</span>
-              <span className="text-2xl font-bold text-gray-900 dark:text-zinc-100">Rp {Number(order.total_amount).toLocaleString('id-ID')}</span>
+            <div className="bg-white/50 dark:bg-zinc-950/50 p-5 border-t border-gray-200 dark:border-zinc-800 space-y-3">
+              <div className="flex justify-between items-center text-sm text-gray-500 dark:text-zinc-400">
+                <span>Subtotal Produk</span>
+                <span className="font-semibold text-gray-800 dark:text-zinc-200">Rp {(Number(order.total_amount) - Number(order.shipping_cost || 0)).toLocaleString('id-ID')}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm text-gray-500 dark:text-zinc-400">
+                <span>Ongkos Kirim</span>
+                <span className="font-semibold text-gray-800 dark:text-zinc-200">
+                  {Number(order.shipping_cost) > 0 ? `Rp ${Number(order.shipping_cost).toLocaleString('id-ID')}` : 'Gratis Ongkir'}
+                </span>
+              </div>
+              <div className="w-full h-px bg-gray-200 dark:bg-zinc-800 my-1"></div>
+              <div className="flex justify-between items-center pt-1">
+                <span className="text-gray-900 dark:text-zinc-100 font-bold">Total Pesanan</span>
+                <span className="text-2xl font-bold text-emas">Rp {Number(order.total_amount).toLocaleString('id-ID')}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -336,20 +383,19 @@ export default function OrderDetail() {
               <div className="flex gap-3 text-sm">
                 <User className="text-gray-400 dark:text-zinc-500 shrink-0 mt-0.5" size={16} />
                 <div>
-                  <p className="text-gray-800 dark:text-zinc-200 font-medium">{order.profiles?.full_name || 'Guest User'}</p>
-                  <p className="text-gray-400 dark:text-zinc-500">{order.profiles?.email || 'No email'}</p>
+                  <p className="text-gray-800 dark:text-zinc-200 font-medium">{customerInfo.name}</p>
                 </div>
               </div>
               
               <div className="flex gap-3 text-sm">
                 <Phone className="text-gray-400 dark:text-zinc-500 shrink-0 mt-0.5" size={16} />
-                <p className="text-gray-800 dark:text-zinc-200 font-mono">{order.contact_phone || '-'}</p>
+                <p className="text-gray-800 dark:text-zinc-200 font-mono">{customerInfo.phone}</p>
               </div>
 
               <div className="flex gap-3 text-sm">
                 <MapPin className="text-gray-400 dark:text-zinc-500 shrink-0 mt-0.5" size={16} />
-                <p className="text-gray-700 dark:text-zinc-300 leading-relaxed">
-                  {order.shipping_address || 'Tidak ada alamat pengiriman'}
+                <p className="text-gray-700 dark:text-zinc-300 leading-relaxed whitespace-pre-line">
+                  {customerInfo.address}
                 </p>
               </div>
             </div>

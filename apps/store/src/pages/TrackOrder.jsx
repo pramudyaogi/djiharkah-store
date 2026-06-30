@@ -5,12 +5,33 @@ import { Package, Truck, CheckCircle, Clock, Search, AlertCircle, ChevronLeft } 
 
 export default function TrackOrder() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const initialCode = searchParams.get('code') || '';
   
   const [trackingCode, setTrackingCode] = useState(initialCode);
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [confirming, setConfirming] = useState(false);
+
+  const handleConfirmReceived = async () => {
+    if (!window.confirm('Apakah Anda yakin pesanan sudah sampai dan diterima dengan baik?')) return;
+    setConfirming(true);
+    try {
+      const { error } = await supabase.rpc('confirm_order_delivery', {
+        p_tracking_code: order.tracking_code
+      });
+      if (error) throw error;
+      alert('Terima kasih! Pesanan Anda telah dinyatakan selesai.');
+      // Refresh order details
+      await handleSearch(null, order.tracking_code);
+    } catch (err) {
+      console.error(err);
+      alert('Gagal mengonfirmasi penerimaan: ' + err.message);
+    } finally {
+      setConfirming(false);
+    }
+  };
 
   useEffect(() => {
     if (initialCode) {
@@ -49,7 +70,7 @@ export default function TrackOrder() {
       case 'pending':
         return { label: 'Menunggu Konfirmasi', icon: <Clock size={40} />, color: 'text-yellow-500', bg: 'bg-yellow-50' };
       case 'processing':
-        return { label: 'Sedang Dikemas', icon: <Package size={40} />, color: 'text-blue-500', bg: 'bg-blue-50' };
+        return { label: 'Sedang Diproses', icon: <Package size={40} />, color: 'text-blue-500', bg: 'bg-blue-50' };
       case 'shipped':
         return { label: 'Dalam Pengiriman', icon: <Truck size={40} />, color: 'text-purple-500', bg: 'bg-purple-50' };
       case 'delivered':
@@ -132,13 +153,34 @@ export default function TrackOrder() {
                     </h4>
                     <p className="text-sm text-gray-600 mt-1">
                       {order.status === 'pending' && 'Pesanan sedang menunggu konfirmasi admin.'}
-                      {order.status === 'processing' && 'Tim kami sedang mengemas pesanan Anda.'}
+                      {order.status === 'processing' && 'Tim kami sedang memproses pesanan Anda.'}
                       {order.status === 'shipped' && 'Pesanan Anda sedang dalam perjalanan ke alamat tujuan.'}
                       {order.status === 'delivered' && 'Pesanan telah diterima. Terima kasih!'}
                       {order.status === 'cancelled' && 'Pesanan dibatalkan oleh admin.'}
                     </p>
                   </div>
                 </div>
+
+                {order.status === 'shipped' && (
+                  <div className="bg-emas/10 border border-emas/20 p-5 rounded-2xl mb-8 flex flex-col sm:flex-row items-center justify-between gap-4 animate-slide-up">
+                    <div className="text-center sm:text-left">
+                      <h4 className="text-sm font-bold text-hitam mb-1">Sudah Menerima Produk?</h4>
+                      <p className="text-xs text-gray-500">Konfirmasi penerimaan barang untuk menyelesaikan pesanan Anda.</p>
+                    </div>
+                    <button
+                      onClick={handleConfirmReceived}
+                      disabled={confirming}
+                      className="w-full sm:w-auto bg-emas hover:bg-yellow-400 text-hitam font-bold text-xs px-5 py-3 rounded-full flex items-center justify-center gap-1.5 transition-all shadow-sm shrink-0"
+                    >
+                      {confirming ? (
+                        <div className="w-4 h-4 border-2 border-hitam border-t-transparent rounded-full animate-spin"></div>
+                      ) : (
+                        <CheckCircle size={14} />
+                      )}
+                      Pesanan Diterima
+                    </button>
+                  </div>
+                )}
 
                 {order.status === 'cancelled' && (
                   <div className="bg-red-50 p-6 rounded-2xl border border-red-100 mb-8">
@@ -233,21 +275,23 @@ export default function TrackOrder() {
                   ))}
                 </div>
 
-                <div className="bg-gray-50 p-6 rounded-xl border border-gray-100">
-                  <div className="flex justify-between items-center mb-2 text-sm text-gray-600">
-                    <span>Subtotal</span>
-                    <span>Rp {order.total_amount.toLocaleString('id-ID')}</span>
-                  </div>
-                  <div className="flex justify-between items-center mb-4 text-sm text-gray-600">
-                    <span>Ongkos Kirim</span>
-                    <span className="text-green-600 font-medium">Gratis</span>
-                  </div>
-                  <div className="w-full h-px bg-gray-200 mb-4"></div>
-                  <div className="flex justify-between items-center">
-                    <span className="font-bold text-hitam">Total Pembayaran</span>
-                    <span className="text-2xl font-bold text-emas">Rp {order.total_amount.toLocaleString('id-ID')}</span>
-                  </div>
-                </div>
+                 <div className="bg-gray-50 p-6 rounded-xl border border-gray-100">
+                   <div className="flex justify-between items-center mb-2 text-sm text-gray-600">
+                     <span>Subtotal</span>
+                     <span>Rp {(order.total_amount - (order.shipping_cost || 0)).toLocaleString('id-ID')}</span>
+                   </div>
+                   <div className="flex justify-between items-center mb-4 text-sm text-gray-600">
+                     <span>Ongkos Kirim</span>
+                     <span className={Number(order.shipping_cost) > 0 ? 'text-gray-700 font-semibold' : 'text-green-600 font-semibold'}>
+                       {Number(order.shipping_cost) > 0 ? `Rp ${Number(order.shipping_cost).toLocaleString('id-ID')}` : 'Gratis'}
+                     </span>
+                   </div>
+                   <div className="w-full h-px bg-gray-200 mb-4"></div>
+                   <div className="flex justify-between items-center">
+                     <span className="font-bold text-hitam">Total Pembayaran</span>
+                     <span className="text-2xl font-bold text-emas">Rp {order.total_amount.toLocaleString('id-ID')}</span>
+                   </div>
+                 </div>
               </div>
 
             </div>

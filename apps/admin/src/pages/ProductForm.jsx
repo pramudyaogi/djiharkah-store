@@ -22,6 +22,7 @@ export default function ProductForm() {
     stock: '',
     description: '',
     is_active: true,
+    free_shipping: true,
   });
 
   // Image State (Single Image)
@@ -46,6 +47,7 @@ export default function ProductForm() {
             stock: product.stock || '',
             description: product.description || '',
             is_active: product.is_active,
+            free_shipping: product.free_shipping ?? true,
           });
           
           if (product.image_url) {
@@ -124,6 +126,7 @@ export default function ProductForm() {
         stock: parseInt(formData.stock || 0),
         description: formData.description,
         is_active: formData.is_active,
+        free_shipping: formData.free_shipping,
         image_url: finalImageUrl
       };
 
@@ -238,6 +241,31 @@ export default function ProductForm() {
               className="w-full bg-white dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-lg px-4 py-3 text-gray-900 dark:text-white focus:border-yellow-500 focus:outline-none transition-colors resize-y"
               placeholder="Jelaskan detail bahan, motif, keunggulan..."
             />
+          </div>
+
+          {/* Gratis Ongkir Toggle */}
+          <div className="flex items-center justify-between p-4 bg-white dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-xl">
+            <div>
+              <div className="font-semibold text-gray-800 dark:text-zinc-200 flex items-center gap-2">
+                <span className="text-green-500">🚚</span> Gratis Ongkir
+              </div>
+              <div className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">
+                {formData.free_shipping ? 'Produk ini gratis ongkir untuk pembeli' : 'Produk ini tidak gratis ongkir'}
+              </div>
+            </div>
+            <label className="flex items-center cursor-pointer">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  name="free_shipping"
+                  checked={formData.free_shipping}
+                  onChange={handleInputChange}
+                  className="sr-only"
+                />
+                <div className={`block w-14 h-8 rounded-full transition-colors ${formData.free_shipping ? 'bg-green-500' : 'bg-gray-300 dark:bg-zinc-700'}`}></div>
+                <div className={`absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform shadow ${formData.free_shipping ? 'translate-x-6' : ''}`}></div>
+              </div>
+            </label>
           </div>
         </div>
 

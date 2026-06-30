@@ -116,6 +116,7 @@ export default function ProductsList() {
                 <th className="pb-3 font-medium px-4">Kategori</th>
                 <th className="pb-3 font-medium px-4">Harga</th>
                 <th className="pb-3 font-medium px-4">Stok</th>
+                <th className="pb-3 font-medium px-4">Terjual</th>
                 <th className="pb-3 font-medium px-4">Status</th>
                 <th className="pb-3 font-medium px-4 text-right">Aksi</th>
               </tr>
@@ -127,7 +128,7 @@ export default function ProductsList() {
                 </tr>
               ) : paginatedProducts.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="text-center py-10 text-gray-500 dark:text-zinc-500">Tidak ada produk ditemukan.</td>
+                  <td colSpan="8" className="text-center py-10 text-gray-500 dark:text-zinc-500">Tidak ada produk ditemukan.</td>
                 </tr>
               ) : (
                 paginatedProducts.map((product, index) => {
@@ -158,7 +159,19 @@ export default function ProductsList() {
                       </td>
                       <td className="py-4 px-4 text-gray-600 dark:text-zinc-300">{product.categories?.name || '-'}</td>
                       <td className="py-4 px-4 text-gray-600 dark:text-zinc-300">Rp {product.price?.toLocaleString('id-ID')}</td>
-                      <td className="py-4 px-4 text-gray-600 dark:text-zinc-300">{totalStock}</td>
+                      <td className="py-4 px-4">
+                        <div className="flex items-center gap-2">
+                          <span className={`font-medium ${totalStock === 0 ? 'text-red-500 dark:text-red-400' : 'text-gray-600 dark:text-zinc-300'}`}>
+                            {totalStock}
+                          </span>
+                          {totalStock === 0 && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/20">
+                              Habis
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-4 px-4 text-gray-600 dark:text-zinc-300">{product.sold_count ?? 0}</td>
                       <td className="py-4 px-4">
                         {product.is_active ? (
                           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-500/20">Aktif</span>

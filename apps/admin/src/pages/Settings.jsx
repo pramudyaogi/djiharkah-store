@@ -81,7 +81,7 @@ export default function Settings() {
   return (
     <div className="max-w-4xl mx-auto pb-12 animate-fade-in">
       <div className="mb-8">
-        <h1 className="text-3xl font-playfair font-bold text-gray-900 dark:text-gray-900 dark:text-white tracking-wide">Pengaturan Toko</h1>
+        <h1 className="text-3xl font-playfair font-bold text-gray-900 dark:text-white tracking-wide">Pengaturan Toko</h1>
         <p className="text-gray-500 dark:text-zinc-400 mt-2">
           Ubah informasi dasar toko yang akan ditampilkan kepada pelanggan di halaman depan (Customer Storefront).
         </p>

@@ -25,7 +25,15 @@ export default function Layout() {
         console.error('Failed to fetch store settings:', err);
       }
     }
+    async function autoCompleteShippedOrders() {
+      try {
+        await supabase.rpc('auto_complete_orders');
+      } catch (err) {
+        console.error('Failed to auto complete old shipped orders:', err);
+      }
+    }
     fetchSettings();
+    autoCompleteShippedOrders();
   }, []);
 
   return (

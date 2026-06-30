@@ -188,8 +188,7 @@ export default function Home() {
         
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
           {featuredProducts.map(product => {
-            const fakeSold = Math.floor(product.id.charCodeAt(0) * 1.5) + 12;
-            const fakeRating = (Math.random() * (5 - 4.5) + 4.5).toFixed(1);
+            const soldCount = product.sold_count ?? 0;
 
             return (
               <Link 
@@ -221,11 +220,8 @@ export default function Home() {
                     <div className="text-hitam-gelap font-bold text-lg leading-none mb-3">
                       Rp {product.price.toLocaleString('id-ID')}
                     </div>
-                    <div className="flex items-center justify-between text-[11px] text-zinc-500">
-                      <div className="flex items-center gap-1 font-medium">
-                        <span className="text-yellow-400 text-sm">★</span> {fakeRating}
-                      </div>
-                      <div>Terjual {fakeSold}+</div>
+                    <div className="flex items-center justify-end text-[11px] text-zinc-500">
+                      <div>Terjual {soldCount}</div>
                     </div>
                   </div>
                 </div>

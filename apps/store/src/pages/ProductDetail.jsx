@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Store, Star, Share2, Heart, ShieldCheck, ShoppingCart, User, AlertCircle, ChevronLeft } from 'lucide-react';
+import { Store, Star, Share2, Heart, ShieldCheck, ShoppingCart, User, AlertCircle, ChevronLeft, MapPin } from 'lucide-react';
 import PopupModal from '../components/PopupModal';
 
 export default function ProductDetail() {
@@ -10,6 +10,7 @@ export default function ProductDetail() {
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
+  const [originCity, setOriginCity] = useState('');
 
   // Popup Modal State
   const [modalConfig, setModalConfig] = useState({ 
@@ -32,6 +33,16 @@ export default function ProductDetail() {
         
         if (prodError) throw prodError;
         setProduct(prodData);
+
+        // Fetch Store Settings for Origin City
+        const { data: settingsData, error: settingsError } = await supabase
+          .from('store_settings')
+          .select('shipping_origin_city')
+          .eq('id', 1)
+          .single();
+        if (!settingsError && settingsData) {
+          setOriginCity(settingsData.shipping_origin_city);
+        }
       } catch (error) {
         console.error('Error fetching data:', error);
       } finally {
@@ -52,8 +63,7 @@ export default function ProductDetail() {
   );
   if (!product) return <div className="text-hitam font-playfair text-xl py-20 text-center">Produk tidak ditemukan.</div>;
 
-  const fakeSold = Math.floor(product.id.charCodeAt(0) * 1.5) + 12;
-  const fakeRating = (Math.random() * (5 - 4.5) + 4.5).toFixed(1);
+  const soldCount = product.sold_count ?? 0;
 
   return (
     <div className="max-w-[1200px] mx-auto pt-6 px-4 pb-20">
@@ -91,12 +101,7 @@ export default function ProductDetail() {
           </h1>
           
           <div className="flex items-center gap-4 text-sm mb-4">
-            <div className="flex items-center gap-1 text-emas border-b border-emas pb-0.5">
-              <span className="font-bold">{fakeRating}</span>
-              <div className="flex text-emas"><Star size={12} fill="currentColor"/><Star size={12} fill="currentColor"/><Star size={12} fill="currentColor"/><Star size={12} fill="currentColor"/><Star size={12} fill="currentColor"/></div>
-            </div>
-            <div className="w-px h-4 bg-gray-300"></div>
-            <div className="text-hitam"><span className="font-bold">{fakeSold}</span> Terjual</div>
+            <div className="text-hitam"><span className="font-bold">{soldCount}</span> Terjual</div>
           </div>
 
           <div className="bg-gradient-to-r from-gray-50 to-white p-6 rounded-2xl border border-gray-100 mb-8 shadow-sm">
@@ -106,11 +111,27 @@ export default function ProductDetail() {
           </div>
 
           <div className="flex flex-col gap-6 mb-8 flex-1">
-            <div className="flex items-center gap-6">
-              <span className="text-gray-500 w-24 shrink-0 text-sm">Pengiriman</span>
-              <div className="flex items-center gap-2 text-sm text-hitam">
-                <span className="bg-green-100 text-green-700 px-2 py-0.5 text-xs rounded-sm font-bold flex items-center gap-1"><ShieldCheck size={12}/> Gratis Ongkir</span>
-                <span>Pengiriman ke <span className="font-bold">Kota Anda</span></span>
+            <div className="flex items-start gap-6">
+              <span className="text-gray-500 w-24 shrink-0 text-sm mt-0.5">Pengiriman</span>
+              <div className="flex flex-col gap-1.5 text-sm text-hitam">
+                <div className="flex items-center gap-2 font-medium">
+                  <span>Dikirim dari:</span>
+                  <span className="font-bold text-emas flex items-center gap-1">
+                    <MapPin size={14} /> {originCity || 'Jakarta Barat'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {product.free_shipping !== false ? (
+                    <>
+                      <span className="bg-green-100 text-green-700 px-2 py-0.5 text-xs rounded-sm font-bold flex items-center gap-1">
+                        <ShieldCheck size={12}/> Gratis Ongkir
+                      </span>
+                      <span className="text-gray-600">Pengiriman ke Kota Anda</span>
+                    </>
+                  ) : (
+                    <span className="text-gray-600">Ongkos kirim dihitung saat checkout</span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -163,7 +184,7 @@ export default function ProductDetail() {
             <div className="text-gray-500">Stok</div>
             <div>{product.stock}</div>
             <div className="text-gray-500">Dikirim Dari</div>
-            <div>Kota Jakarta Selatan</div>
+            <div>{originCity || 'Jakarta Barat'}</div>
           </div>
           <div className="whitespace-pre-line leading-relaxed text-gray-700">
             {product.description || "Tidak ada deskripsi rinci untuk produk ini."}

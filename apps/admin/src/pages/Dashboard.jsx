@@ -27,8 +27,8 @@ export default function Dashboard() {
       try {
         // Fetch all orders and order items
         const [ordersRes, orderItemsRes] = await Promise.all([
-          supabase.from('orders').select('id, total_amount, status, created_at, shipping_address'),
-          supabase.from('order_items').select('quantity, order_id, orders!inner(status)')
+          supabase.from('orders').select('id, total_amount, status, created_at, shipping_address').eq('is_deleted', false),
+          supabase.from('order_items').select('quantity, order_id, orders!inner(status, is_deleted)').eq('orders.is_deleted', false)
         ]);
 
         const orders = ordersRes.data || [];
@@ -70,6 +70,7 @@ export default function Dashboard() {
         const { data: recent } = await supabase
           .from('orders')
           .select('*') // No profiles here since guest checkout
+          .eq('is_deleted', false)
           .order('created_at', { ascending: false })
           .limit(5);
           

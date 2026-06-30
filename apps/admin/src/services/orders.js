@@ -10,6 +10,7 @@ export async function getOrders() {
       *,
       profiles (full_name)
     `)
+    .eq('is_deleted', false)
     .order('created_at', { ascending: false });
 
   if (error) throw error;
