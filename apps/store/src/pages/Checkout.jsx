@@ -1,7 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Store, ChevronLeft, MapPin, Loader2, X, Check, Copy } from 'lucide-react';
+import { Store, ChevronLeft, MapPin, Loader2, X, Check, Copy, ChevronDown, Search } from 'lucide-react';
+
+const countryCodesList = [
+  { name: 'Indonesia', code: '+62', flag: '🇮🇩' },
+  { name: 'Malaysia', code: '+60', flag: '🇲🇾' },
+  { name: 'Singapore', code: '+65', flag: '🇸🇬' },
+  { name: 'Brunei', code: '+673', flag: '🇧🇳' },
+  { name: 'Saudi Arabia', code: '+966', flag: '🇸🇦' },
+  { name: 'United Kingdom', code: '+44', flag: '🇬🇧' },
+  { name: 'United States', code: '+1', flag: '🇺🇸' },
+];
 import { MapContainer, TileLayer, Circle, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 
@@ -60,6 +70,38 @@ export default function Checkout() {
   const [success, setSuccess] = useState(false);
   const [trackingCode, setTrackingCode] = useState('');
   const [copied, setCopied] = useState(false);
+
+  const [selectedCountry, setSelectedCountry] = useState(countryCodesList[0]);
+  const [localPhone, setLocalPhone] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const dropdownRef = useRef(null);
+
+  // Sync combined phone number to formData.phone
+  useEffect(() => {
+    if (localPhone) {
+      setFormData(prev => ({ ...prev, phone: `${selectedCountry.code} ${localPhone}` }));
+    } else {
+      setFormData(prev => ({ ...prev, phone: '' }));
+    }
+  }, [selectedCountry, localPhone]);
+
+  // Click outside listener for country code dropdown
+  useEffect(() => {
+    if (!showDropdown) return;
+    const handleOutsideClick = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [showDropdown]);
+
+  const filteredCountries = countryCodesList.filter(c =>
+    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    c.code.includes(searchTerm)
+  );
 
   // Structured address state (in modal)
   const [addressDetails, setAddressDetails] = useState({
@@ -363,11 +405,75 @@ export default function Checkout() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">No Telepon *</label>
-                  <input
-                    type="text" name="phone" value={formData.phone} onChange={handleChange}
-                    placeholder="08xxxxxxxxxx"
-                    className={`w-full px-4 py-3 bg-gray-50/80 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white transition-all placeholder:text-gray-300 ${validationErrors.phone ? 'border-red-300' : 'border-gray-200 focus:border-emas focus:ring-1 focus:ring-emas/20'}`}
-                  />
+                  <div className="flex gap-2 relative" ref={dropdownRef}>
+                    {/* Country Code Selector */}
+                    <div className="relative shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setShowDropdown(!showDropdown)}
+                        className={`flex items-center gap-1.5 bg-gray-50/80 border rounded-xl px-3 py-3 text-hitam text-sm focus:outline-none focus:bg-white transition-all h-full ${validationErrors.phone ? 'border-red-300' : 'border-gray-200 focus:border-emas focus:ring-1 focus:ring-emas/20'}`}
+                      >
+                        <span className="text-base">{selectedCountry.flag}</span>
+                        <span className="font-semibold text-sm">{selectedCountry.code}</span>
+                        <ChevronDown size={14} className="text-gray-400" />
+                      </button>
+                      
+                      {showDropdown && (
+                        <div className="absolute left-0 mt-2 w-60 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
+                          <div className="p-2 border-b border-gray-100 flex items-center gap-2 bg-gray-50">
+                            <Search size={14} className="text-gray-400 shrink-0" />
+                            <input
+                              type="text"
+                              placeholder="Cari negara..."
+                              value={searchTerm}
+                              onChange={(e) => setSearchTerm(e.target.value)}
+                              className="w-full bg-transparent text-xs text-gray-900 outline-none"
+                            />
+                          </div>
+                          <div className="max-h-48 overflow-y-auto py-1">
+                            {filteredCountries.map((c) => (
+                              <button
+                                key={c.code}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedCountry(c);
+                                  setShowDropdown(false);
+                                  setSearchTerm('');
+                                }}
+                                className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 text-left text-sm text-gray-900 transition-colors"
+                              >
+                                <span className="flex items-center gap-2">
+                                  <span className="text-base">{c.flag}</span>
+                                  <span className="truncate max-w-[110px]">{c.name}</span>
+                                </span>
+                                <span className="text-gray-400 font-mono text-xs">{c.code}</span>
+                              </button>
+                            ))}
+                            {filteredCountries.length === 0 && (
+                              <div className="px-3 py-2 text-xs text-gray-400 text-center">Negara tidak ditemukan</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Local Phone Input */}
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        value={localPhone}
+                        onChange={(e) => {
+                          let val = e.target.value.replace(/\D/g, ''); // Hanya simpan angka
+                          if (val.startsWith('0')) {
+                            val = val.substring(1);
+                          }
+                          setLocalPhone(val);
+                        }}
+                        placeholder="8xxxxxxxxxx"
+                        className={`w-full px-4 py-3 bg-gray-50/80 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white transition-all placeholder:text-gray-300 ${validationErrors.phone ? 'border-red-300' : 'border-gray-200 focus:border-emas focus:ring-1 focus:ring-emas/20'}`}
+                      />
+                    </div>
+                  </div>
                   {validationErrors.phone && <p className="text-red-500 text-xs mt-1.5 font-medium">{validationErrors.phone}</p>}
                 </div>
                 

@@ -13,6 +13,37 @@ export default function TrackOrder() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [confirming, setConfirming] = useState(false);
+  const [storePhone, setStorePhone] = useState('');
+
+  const cleanPhoneForWhatsApp = (phoneStr) => {
+    if (!phoneStr) return '';
+    let cleaned = phoneStr.replace(/\D/g, '');
+    if (cleaned.startsWith('0')) {
+      cleaned = '62' + cleaned.substring(1);
+    }
+    return cleaned;
+  };
+
+  const getRecipientName = () => {
+    if (!order) return '';
+    if (order.customer_name && order.customer_name !== 'Guest') {
+      return order.customer_name;
+    }
+    // If it's Guest, try to extract name from shipping_address
+    if (order.shipping_address) {
+      const parts = order.shipping_address.split(' - ');
+      if (parts.length > 0 && parts[0].trim()) {
+        return parts[0].trim();
+      }
+    }
+    return 'Guest';
+  };
+
+  const handleWhatsAppOrderInquiry = () => {
+    const cleanedPhone = cleanPhoneForWhatsApp(storePhone || '6281234567890');
+    const message = `Assalamualaikum Djiharkah Store.\nSaya ingin menanyakan pesanan saya:\n- Kode Pesanan: ${order.tracking_code}\n- Status: ${getStatusDisplay(order.status).label}\n- Penerima: ${getRecipientName()}\n- Total Pembayaran: Rp ${order.total_amount.toLocaleString('id-ID')}`;
+    window.open(`https://wa.me/${cleanedPhone}?text=${encodeURIComponent(message)}`, '_blank');
+  };
 
   const handleConfirmReceived = async () => {
     if (!window.confirm('Apakah Anda yakin pesanan sudah sampai dan diterima dengan baik?')) return;
@@ -38,6 +69,20 @@ export default function TrackOrder() {
       handleSearch(null, initialCode);
     }
   }, [initialCode]);
+
+  useEffect(() => {
+    async function fetchStorePhone() {
+      try {
+        const { data, error } = await supabase.from('store_settings').select('phone').eq('id', 1).single();
+        if (data && !error) {
+          setStorePhone(data.phone || '');
+        }
+      } catch (err) {
+        console.error('Failed to fetch store settings:', err);
+      }
+    }
+    fetchStorePhone();
+  }, []);
 
   const handleSearch = async (e, code = trackingCode) => {
     if (e) e.preventDefault();
@@ -95,20 +140,20 @@ export default function TrackOrder() {
       
       {/* Search Bar */}
       <div className="max-w-xl mx-auto mb-12">
-        <form onSubmit={handleSearch} className="flex relative">
+        <form onSubmit={handleSearch} className="flex relative items-center">
           <input 
             type="text" 
             value={trackingCode}
             onChange={(e) => setTrackingCode(e.target.value.toUpperCase())}
-            placeholder="Contoh: ORD-240626-A1B2" 
-            className="w-full px-6 py-4 pr-32 text-lg font-mono tracking-widest bg-white border-2 border-gray-200 rounded-full focus:outline-none focus:border-emas transition-colors uppercase shadow-sm"
+            placeholder="Contoh: ORD-240626" 
+            className="w-full px-4 sm:px-6 py-3 sm:py-4 pr-24 sm:pr-32 text-sm sm:text-lg font-mono tracking-wider sm:tracking-widest bg-white border-2 border-gray-200 rounded-full focus:outline-none focus:border-emas transition-colors uppercase shadow-sm"
           />
           <button 
             type="submit"
             disabled={loading || !trackingCode}
-            className="absolute right-2 top-2 bottom-2 px-6 bg-emas text-hitam font-bold rounded-full hover:bg-hitam hover:text-emas transition-colors flex items-center gap-2 disabled:opacity-50"
+            className="absolute right-1.5 top-1.5 bottom-1.5 px-4 sm:px-6 bg-emas text-hitam font-bold text-xs sm:text-sm rounded-full hover:bg-hitam hover:text-emas transition-colors flex items-center gap-1.5 disabled:opacity-50"
           >
-            {loading ? 'Mencari...' : <><Search size={18} /> CARI</>}
+            {loading ? '...' : <><Search size={14} className="sm:w-[18px] sm:h-[18px]" /> CARI</>}
           </button>
         </form>
         {error && (
@@ -160,6 +205,16 @@ export default function TrackOrder() {
                     </p>
                   </div>
                 </div>
+
+                <button
+                  onClick={handleWhatsAppOrderInquiry}
+                  className="w-full mb-8 bg-white hover:bg-zinc-50 text-hitam font-bold py-3.5 px-6 rounded-2xl flex items-center justify-center gap-2 transition-all duration-300 shadow-md hover:-translate-y-0.5 active:scale-95 border-2 border-hitam"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.662c1.746.953 3.71 1.458 5.704 1.459h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413" />
+                  </svg>
+                  Tanyakan Pesanan via WhatsApp
+                </button>
 
                 {order.status === 'shipped' && (
                   <div className="bg-emas/10 border border-emas/20 p-5 rounded-2xl mb-8 flex flex-col sm:flex-row items-center justify-between gap-4 animate-slide-up">
@@ -240,8 +295,8 @@ export default function TrackOrder() {
 
                 <div className="space-y-6">
                   <div>
-                    <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">Informasi Penerima</h4>
-                    <p className="text-hitam font-medium">{order.customer_name}</p>
+                    <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">Penerima</h4>
+                    <p className="text-hitam font-medium">{getRecipientName()}</p>
                   </div>
                   <div>
                     <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">Alamat Pengiriman</h4>
