@@ -71,7 +71,7 @@ export default function Login() {
                   className="appearance-none relative block w-full px-4 py-3 bg-zinc-950/50 border border-zinc-800 placeholder-zinc-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all sm:text-sm"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@djiharkah.com"
+                  placeholder="Masukkan email Anda"
                 />
               </div>
               <div>
