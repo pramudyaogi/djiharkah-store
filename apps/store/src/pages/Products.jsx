@@ -40,13 +40,69 @@ export default function Products() {
         if (sortBy === 'terlaris') {
           query = query.order('sold_count', { ascending: false });
         } else {
-          // terkait: default order
-          query = query.order('created_at', { ascending: false });
+          // terkait: default order based on admin sorting
+          query = query.order('display_order', { ascending: true }).order('created_at', { ascending: false });
         }
 
         const { data: prodData, error } = await query;
         if (error) throw error;
-        setProducts(prodData || []);
+
+        // Fetch active promotions to apply promotional overrides
+        const { data: activePromos, error: promoError } = await supabase
+          .from('promotions')
+          .select('*')
+          .eq('is_active', true);
+
+        let mappedProducts = prodData || [];
+
+        if (!promoError && activePromos && activePromos.length > 0 && mappedProducts.length > 0) {
+          const promoIds = activePromos.map(p => p.id);
+          const { data: promoProds, error: promoProdError } = await supabase
+            .from('promo_products')
+            .select('promo_id, product_id, discount_percent, promo_stock')
+            .in('promo_id', promoIds);
+
+          if (!promoProdError && promoProds && promoProds.length > 0) {
+            const flashSalePromo = activePromos.find(p => p.type === 'flash_sale');
+            const customPromo = activePromos.find(p => p.type === 'custom_promo');
+
+            mappedProducts = mappedProducts.map(p => {
+              let matchedPromoRel = null;
+              let matchedPromo = null;
+
+              if (flashSalePromo && promoProds.some(rp => rp.product_id === p.id && rp.promo_id === flashSalePromo.id && rp.promo_stock > 0)) {
+                matchedPromoRel = promoProds.find(rp => rp.product_id === p.id && rp.promo_id === flashSalePromo.id);
+                matchedPromo = flashSalePromo;
+              } else if (customPromo && promoProds.some(rp => rp.product_id === p.id && rp.promo_id === customPromo.id && rp.promo_stock > 0)) {
+                matchedPromoRel = promoProds.find(rp => rp.product_id === p.id && rp.promo_id === customPromo.id);
+                matchedPromo = customPromo;
+              }
+
+              if (matchedPromo && matchedPromoRel) {
+                const finalDiscount = matchedPromo.use_default_discount
+                  ? (matchedPromo.discount_percent || 0)
+                  : (matchedPromoRel.discount_percent !== null && matchedPromoRel.discount_percent !== undefined ? matchedPromoRel.discount_percent : (matchedPromo.discount_percent || 0));
+
+                const origPrice = Number(p.original_price || p.price);
+                const discountPrice = origPrice - (origPrice * finalDiscount / 100);
+
+                return {
+                  ...p,
+                  discount_percent: finalDiscount,
+                  original_price: origPrice,
+                  price: discountPrice,
+                  stock: matchedPromoRel.promo_stock !== null && matchedPromoRel.promo_stock !== undefined ? matchedPromoRel.promo_stock : p.stock,
+                  original_stock: p.stock,
+                  promo_type: matchedPromo.type,
+                  regular_price: p.price
+                };
+              }
+              return p;
+            });
+          }
+        }
+
+        setProducts(mappedProducts);
       } catch (error) {
         console.error('Error fetching products:', error);
       } finally {
@@ -198,7 +254,7 @@ export default function Products() {
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-20">
+          <div className="flex justify-center items-center min-h-[60vh] w-full col-span-full">
             <div className="w-8 h-8 border-4 border-emas border-t-transparent rounded-full animate-spin"></div>
           </div>
         ) : (
@@ -218,6 +274,21 @@ export default function Products() {
                     ) : (
                       <div className="absolute inset-0 flex items-center justify-center text-gray-300 text-xs font-bold bg-gray-100">NO IMG</div>
                     )}
+                    {product.promo_type === 'flash_sale' && (
+                      <div className="absolute top-2 left-2 bg-red-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded shadow-sm z-10 tracking-wider">
+                        ⚡ Flash Sale
+                      </div>
+                    )}
+                    {product.promo_type === 'custom_promo' && (
+                      <div className="absolute top-2 left-2 bg-emerald-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded shadow-sm z-10 tracking-wider">
+                        ✨ Promo
+                      </div>
+                    )}
+                    {product.discount_percent > 0 && (
+                      <div className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm z-10 animate-pulse">
+                        -{product.discount_percent}%
+                      </div>
+                    )}
                   </div>
 
                   <div className="p-4 flex flex-col flex-1">
@@ -226,9 +297,25 @@ export default function Products() {
                     </h3>
 
                     <div className="mt-auto pt-3 border-t border-gray-50">
-                      <div className="text-hitam-gelap font-bold text-lg leading-none mb-3">
-                        Rp {product.price.toLocaleString('id-ID')}
-                      </div>
+                      {product.discount_percent > 0 && product.original_price ? (
+                        <div className="space-y-1 mb-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold text-red-500 bg-red-50 px-1.5 py-0.5 rounded">
+                              {product.discount_percent}%
+                            </span>
+                            <span className="text-xs text-zinc-400 line-through">
+                              Rp {Number(product.original_price).toLocaleString('id-ID')}
+                            </span>
+                          </div>
+                          <div className="text-hitam-gelap font-bold text-base leading-none">
+                            Rp {Number(product.price).toLocaleString('id-ID')}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-hitam-gelap font-bold text-lg leading-none mb-3">
+                          Rp {product.price ? Number(product.price).toLocaleString('id-ID') : '-'}
+                        </div>
+                      )}
                       <div className="flex items-center justify-end text-[11px] text-zinc-500">
                         <div>Terjual {soldCount}</div>
                       </div>

@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { Eye, EyeOff } from 'lucide-react';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -26,24 +28,22 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex w-full">
-      {/* Left Side: Background Image */}
-      <div className="hidden lg:flex w-1/2 bg-black relative justify-center items-center overflow-hidden">
+    <div className="min-h-screen flex flex-col lg:flex-row w-full bg-zinc-950 overflow-y-auto lg:overflow-hidden">
+      {/* Banner Image Area */}
+      <div className="w-full lg:w-1/2 aspect-[16/10] lg:aspect-auto lg:h-auto bg-black relative flex justify-center items-center overflow-hidden shrink-0">
         {/* Background Image with Overlay */}
         <div 
-          className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat opacity-60"
+          className="absolute inset-0 z-0 bg-cover bg-[center_15%] lg:bg-center bg-no-repeat opacity-80 lg:opacity-60"
           style={{ backgroundImage: "url('/login-bg.png')" }}
         ></div>
         {/* Efek transisi dari bawah */}
-        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-transparent z-10"></div>
-        {/* Efek transisi halus dari kiri (gelap) ke tengah (terang) lalu ke KANAN (menyatu dengan panel login zinc-950) */}
-        <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/80 via-transparent to-zinc-950 z-10"></div>
-        
-        {/* Area teks dihapus karena gambar latar belakang sudah memiliki teks sendiri */}
+        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-transparent z-10"></div>
+        {/* Efek transisi halus dari kiri ke kanan (hanya untuk desktop) */}
+        <div className="hidden lg:block absolute inset-0 bg-gradient-to-r from-zinc-950/80 via-transparent to-zinc-950 z-10"></div>
       </div>
 
       {/* Right Side: Login Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center bg-zinc-950 py-12 px-4 sm:px-6 lg:px-8 relative">
+      <div className="w-full lg:w-1/2 flex-1 flex items-center justify-center bg-zinc-950 py-8 lg:py-12 px-4 sm:px-6 lg:px-8 relative z-10">
         {/* Subtle glow effect behind the form */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-yellow-900/10 blur-3xl rounded-full pointer-events-none"></div>
 
@@ -76,14 +76,23 @@ export default function Login() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-zinc-300 mb-1.5">Password</label>
-                <input
-                  type="password"
-                  required
-                  className="appearance-none relative block w-full px-4 py-3 bg-zinc-950/50 border border-zinc-800 placeholder-zinc-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all sm:text-sm"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    className="appearance-none relative block w-full px-4 py-3 bg-zinc-950/50 border border-zinc-800 placeholder-zinc-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all sm:text-sm pr-12"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-200 transition-colors focus:outline-none"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
             </div>
 

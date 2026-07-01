@@ -7,13 +7,13 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ProductsList from './pages/ProductsList';
 import ProductForm from './pages/ProductForm';
-import Categories from './pages/Categories';
 import OrdersList from './pages/OrdersList';
 import OrderDetail from './pages/OrderDetail';
 import Reviews from './pages/Reviews';
 import Settings from './pages/Settings';
 import SalesReport from './pages/SalesReport';
 import ShippingSettings from './pages/ShippingSettings';
+import Promotions from './pages/Promotions';
 
 function AppRoutes() {
   const { user, role } = useAuth();
@@ -31,11 +31,12 @@ function AppRoutes() {
           <Route path="/products" element={<ProductsList />} />
           <Route path="/products/create" element={<ProductForm />} />
           <Route path="/products/edit/:id" element={<ProductForm />} />
-          <Route path="/categories" element={<Categories />} />
+          <Route path="/categories" element={<Navigate to="/products" replace />} />
           <Route path="/orders" element={<OrdersList />} />
           <Route path="/orders/:id" element={<OrderDetail />} />
           <Route path="/reviews" element={<Reviews />} />
           <Route path="/sales" element={<SalesReport />} />
+          <Route path="/promotions" element={<Promotions />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/shipping" element={<ShippingSettings />} />
         </Route>
@@ -46,11 +47,15 @@ function AppRoutes() {
   );
 }
 
+import { ToastProvider } from './contexts/ToastContext';
+
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <ToastProvider>
+          <AppRoutes />
+        </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
   );

@@ -91,7 +91,7 @@ export default function TrackOrder() {
       </button>
 
       <h1 className="text-3xl font-playfair font-bold text-hitam mb-2 text-center">Lacak Pesanan Anda</h1>
-      <p className="text-center text-gray-500 mb-10">Masukkan kode resi yang Anda dapatkan saat checkout.</p>
+      <p className="text-center text-gray-500 mb-10">Masukkan kode pesanan yang Anda dapatkan saat checkout.</p>
       
       {/* Search Bar */}
       <div className="max-w-xl mx-auto mb-12">
@@ -125,7 +125,7 @@ export default function TrackOrder() {
           {/* Header */}
           <div className="bg-gray-50 p-6 md:p-8 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
-              <p className="text-sm text-gray-500 mb-1 font-medium">KODE RESI</p>
+              <p className="text-sm text-gray-500 mb-1 font-medium">KODE PESANAN</p>
               <h2 className="text-2xl font-mono font-bold text-hitam tracking-wider">{order.tracking_code}</h2>
             </div>
             <div className="text-left md:text-right">

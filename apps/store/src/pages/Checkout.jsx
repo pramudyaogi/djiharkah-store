@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Store, ChevronLeft, MapPin, Loader2, X, Check } from 'lucide-react';
+import { Store, ChevronLeft, MapPin, Loader2, X, Check, Copy } from 'lucide-react';
 import { MapContainer, TileLayer, Circle, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 
@@ -35,6 +35,20 @@ export default function Checkout() {
   const navigate = useNavigate();
   const { product, quantity } = location.state || {};
 
+  // Hitung split pricing jika ada promo aktif dan kuantitas melebihi promo stock
+  const isPromoActive = !!product?.promo_type;
+  const promoStockAvailable = isPromoActive ? (product?.stock || 0) : 0;
+  
+  const promoQty = isPromoActive ? Math.min(quantity, promoStockAvailable) : 0;
+  const normalQty = isPromoActive ? Math.max(0, quantity - promoStockAvailable) : quantity;
+  
+  const promoPrice = product?.price || 0;
+  const normalPrice = isPromoActive ? (product?.regular_price || product?.price || 0) : (product?.price || 0);
+
+  const promoSubtotal = promoQty * promoPrice;
+  const normalSubtotal = normalQty * normalPrice;
+  const totalSubtotal = promoSubtotal + normalSubtotal;
+
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -45,6 +59,7 @@ export default function Checkout() {
   const [validationErrors, setValidationErrors] = useState({});
   const [success, setSuccess] = useState(false);
   const [trackingCode, setTrackingCode] = useState('');
+  const [copied, setCopied] = useState(false);
 
   // Structured address state (in modal)
   const [addressDetails, setAddressDetails] = useState({
@@ -76,6 +91,13 @@ export default function Checkout() {
     fetchShippingRates();
   }, []);
 
+  // Scroll to top when order success screen is shown
+  useEffect(() => {
+    if (success) {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    }
+  }, [success]);
+
   const calculateShipping = (provinceName) => {
     if (product?.free_shipping === true) {
       setShippingCost(0);
@@ -104,6 +126,8 @@ export default function Checkout() {
     postalCode: '',
     country: 'Indonesia'
   });
+
+  const [addressErrors, setAddressErrors] = useState({});
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [mapCoords, setMapCoords] = useState([-6.2088, 106.8456]); // Default: Jakarta
@@ -174,6 +198,7 @@ export default function Checkout() {
 
   const openAddressModal = () => {
     setTempAddress({ ...addressDetails });
+    setAddressErrors({});
     setIsModalOpen(true);
   };
 
@@ -181,18 +206,25 @@ export default function Checkout() {
     e.preventDefault();
     
     // Check validation of structured address
+    const errors = {};
     if (!tempAddress.street.trim()) {
-      alert('Mohon isi alamat jalan / detail lokasi.');
-      return;
+      errors.street = 'Detail alamat/jalan wajib diisi.';
     }
     if (!tempAddress.city.trim()) {
-      alert('Mohon isi kota / kabupaten.');
-      return;
+      errors.city = 'Kota/kabupaten wajib diisi.';
     }
     if (!tempAddress.province.trim()) {
-      alert('Mohon isi provinsi.');
+      errors.province = 'Provinsi wajib diisi.';
+    }
+    if (!tempAddress.country.trim()) {
+      errors.country = 'Negara wajib diisi.';
+    }
+    
+    if (Object.keys(errors).length > 0) {
+      setAddressErrors(errors);
       return;
     }
+    setAddressErrors({});
 
     // Save details
     setAddressDetails(tempAddress);
@@ -239,7 +271,11 @@ export default function Checkout() {
         p_product_id: product.id,
         p_quantity: quantity,
         p_unit_price: product.price,
-        p_shipping_cost: shippingCost
+        p_shipping_cost: shippingCost,
+        p_promo_qty: promoQty,
+        p_promo_price: promoPrice,
+        p_normal_qty: normalQty,
+        p_normal_price: normalPrice
       });
       if (rpcError) throw rpcError;
       setTrackingCode(orderData.tracking_code);
@@ -260,11 +296,30 @@ export default function Checkout() {
         <h1 className="text-3xl font-playfair font-bold text-hitam mb-4">Pesanan Berhasil Dibuat!</h1>
         <p className="text-gray-600 mb-6">Terima kasih telah berbelanja di Djiharkah Store. Tim kami akan segera menghubungi Anda melalui nomor telepon yang diberikan.</p>
         <div className="bg-gray-50 border border-gray-200 p-6 rounded-2xl max-w-sm mx-auto mb-8">
-          <p className="text-sm text-gray-500 mb-2 uppercase tracking-wide font-bold">Kode Resi Anda</p>
-          <div className="text-2xl font-mono font-bold text-emas tracking-wider select-all cursor-pointer" title="Klik untuk menyalin" onClick={() => navigator.clipboard.writeText(trackingCode)}>
-            {trackingCode || 'MEMPROSES...'}
+          <p className="text-sm text-gray-500 mb-2 uppercase tracking-wide font-bold">Kode Pesanan Anda</p>
+          <div className="flex items-center justify-center gap-3 mt-1">
+            <span className="text-2xl font-mono font-bold text-emas tracking-wider select-all">
+              {trackingCode || 'MEMPROSES...'}
+            </span>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(trackingCode);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+              className="p-1.5 text-gray-400 hover:text-emas hover:bg-white rounded-lg border border-gray-200/60 shadow-sm hover:shadow-soft transition-all duration-200"
+              title="Salin Kode Pesanan"
+            >
+              {copied ? (
+                <span className="flex items-center gap-1 text-xs text-green-600 font-semibold px-0.5">
+                  <Check size={14} /> Tersalin
+                </span>
+              ) : (
+                <Copy size={15} />
+              )}
+            </button>
           </div>
-          <p className="text-xs text-gray-400 mt-2">Simpan kode ini untuk melacak status pesanan Anda.</p>
+          <p className="text-xs text-gray-400 mt-3">Simpan kode ini untuk melacak status pesanan Anda.</p>
         </div>
         <div className="flex justify-center gap-4">
           <button onClick={() => navigate('/track-order?code=' + trackingCode)} className="bg-emas text-hitam px-6 py-3 font-bold hover:bg-hitam hover:text-emas transition-colors rounded-lg shadow-sm">Lacak Pesanan</button>
@@ -366,13 +421,28 @@ export default function Checkout() {
               </div>
               <div className="flex flex-col justify-center gap-1">
                 <p className="font-semibold text-hitam text-sm leading-snug">{product.name}</p>
-                <p className="text-xs text-gray-400">{quantity} × Rp {product.price.toLocaleString('id-ID')}</p>
+                {isPromoActive ? (
+                  <div className="space-y-1 text-xs">
+                    {promoQty > 0 && (
+                      <p className="text-red-500 font-medium">
+                        {promoQty} × Rp {promoPrice.toLocaleString('id-ID')} (Harga Promo)
+                      </p>
+                    )}
+                    {normalQty > 0 && (
+                      <p className="text-gray-500">
+                        {normalQty} × Rp {normalPrice.toLocaleString('id-ID')} (Harga Normal)
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400">{quantity} × Rp {product.price.toLocaleString('id-ID')}</p>
+                )}
               </div>
             </div>
             <div className="space-y-3 mb-6 text-sm">
               <div className="flex justify-between text-gray-500">
                 <span>Subtotal</span>
-                <span>Rp {(product.price * quantity).toLocaleString('id-ID')}</span>
+                <span>Rp {totalSubtotal.toLocaleString('id-ID')}</span>
               </div>
               <div className="flex justify-between text-gray-500">
                 <span>Ongkos Kirim</span>
@@ -387,7 +457,7 @@ export default function Checkout() {
             </div>
             <div className="flex justify-between items-center pt-5 border-t border-gray-100 mb-7">
               <span className="font-bold text-hitam text-sm">Total</span>
-              <span className="text-2xl font-bold text-hitam">Rp {((product.price * quantity) + shippingCost).toLocaleString('id-ID')}</span>
+              <span className="text-2xl font-bold text-hitam">Rp {(totalSubtotal + shippingCost).toLocaleString('id-ID')}</span>
             </div>
             <button
               form="guest-checkout-form"
@@ -427,14 +497,19 @@ export default function Checkout() {
             <div className="p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-6">
               
               {/* Form Fields */}
-              <form onSubmit={saveAddressModal} className="space-y-4">
+              <form onSubmit={saveAddressModal} noValidate className="space-y-4">
                 <div>
                   <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Jalan / Detail Alamat *</label>
                   <textarea
-                    name="street" required rows={2} value={tempAddress.street} onChange={handleAddressChange}
+                    name="street" rows={2} value={tempAddress.street} onChange={handleAddressChange}
                     placeholder="Nama Jalan, Blok, No. Rumah, RT/RW, Apartemen..."
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:border-emas focus:ring-1 focus:ring-emas/20 transition-all placeholder:text-gray-300 resize-none"
+                    className={`w-full px-3 py-2 bg-gray-50 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-emas/20 transition-all placeholder:text-gray-300 resize-none ${
+                      addressErrors.street ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
+                    }`}
                   />
+                  {addressErrors.street && (
+                    <p className="text-[11px] text-red-500 font-medium mt-1">{addressErrors.street}</p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -449,10 +524,15 @@ export default function Checkout() {
                   <div>
                     <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Kota / Kabupaten *</label>
                     <input
-                      type="text" name="city" required value={tempAddress.city} onChange={handleAddressChange}
+                      type="text" name="city" value={tempAddress.city} onChange={handleAddressChange}
                       placeholder="Kota atau Kabupaten"
-                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:border-emas focus:ring-1 focus:ring-emas/20 transition-all"
+                      className={`w-full px-3 py-2 bg-gray-50 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-emas/20 transition-all ${
+                        addressErrors.city ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
+                      }`}
                     />
+                    {addressErrors.city && (
+                      <p className="text-[11px] text-red-500 font-medium mt-1">{addressErrors.city}</p>
+                    )}
                   </div>
                 </div>
 
@@ -460,10 +540,15 @@ export default function Checkout() {
                   <div>
                     <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Provinsi *</label>
                     <input
-                      type="text" name="province" required value={tempAddress.province} onChange={handleAddressChange}
+                      type="text" name="province" value={tempAddress.province} onChange={handleAddressChange}
                       placeholder="Provinsi"
-                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:border-emas focus:ring-1 focus:ring-emas/20 transition-all"
+                      className={`w-full px-3 py-2 bg-gray-50 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-emas/20 transition-all ${
+                        addressErrors.province ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
+                      }`}
                     />
+                    {addressErrors.province && (
+                      <p className="text-[11px] text-red-500 font-medium mt-1">{addressErrors.province}</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Kode Pos</label>
@@ -478,10 +563,15 @@ export default function Checkout() {
                 <div>
                   <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Negara *</label>
                   <input
-                    type="text" name="country" required value={tempAddress.country} onChange={handleAddressChange}
+                    type="text" name="country" value={tempAddress.country} onChange={handleAddressChange}
                     placeholder="Negara"
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:border-emas focus:ring-1 focus:ring-emas/20 transition-all"
+                    className={`w-full px-3 py-2 bg-gray-50 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-emas/20 transition-all ${
+                      addressErrors.country ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
+                    }`}
                   />
+                  {addressErrors.country && (
+                    <p className="text-[11px] text-red-500 font-medium mt-1">{addressErrors.country}</p>
+                  )}
                 </div>
 
                 <div className="pt-2 flex gap-3">

@@ -40,6 +40,7 @@ export async function getProducts() {
       *,
       categories (name)
     `)
+    .order('display_order', { ascending: true })
     .order('created_at', { ascending: false });
 
   if (error) throw error;
@@ -171,6 +172,17 @@ export async function updateCategoryOrders(updates) {
   // So we run them concurrently in a Promise.all
   const promises = updates.map(update => 
     supabase.from('categories').update({ display_order: update.display_order }).eq('id', update.id)
+  );
+  
+  await Promise.all(promises);
+}
+
+/**
+ * Update multiple products' order
+ */
+export async function updateProductOrders(updates) {
+  const promises = updates.map(update => 
+    supabase.from('products').update({ display_order: update.display_order }).eq('id', update.id)
   );
   
   await Promise.all(promises);

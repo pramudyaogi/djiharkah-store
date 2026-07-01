@@ -1,7 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Edit, Trash2, AlertCircle } from 'lucide-react';
-import { getProducts, getCategories, softDeleteProduct } from '../services/products';
+import { Plus, Search, Edit, Trash2, AlertCircle, Tag, GripVertical, X } from 'lucide-react';
+import { 
+  getProducts, 
+  getCategories, 
+  softDeleteProduct,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+  updateCategoryOrders,
+  updateProductOrders
+} from '../services/products';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 export default function ProductsList() {
   const [products, setProducts] = useState([]);
@@ -14,7 +24,17 @@ export default function ProductsList() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  // Modal State
+  // Category search state
+  const [categorySearchQuery, setCategorySearchQuery] = useState('');
+
+  // Category Modal State
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [categoryModalMode, setCategoryModalMode] = useState('add'); // 'add' or 'edit'
+  const [currentCategory, setCurrentCategory] = useState({ name: '', slug: '', description: '' });
+  const [categorySaving, setCategorySaving] = useState(false);
+  const [categorySaveError, setCategorySaveError] = useState(null);
+
+  // Product Delete Modal State
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState(null);
 
@@ -29,18 +49,19 @@ export default function ProductsList() {
       setProducts(prodData);
       setCategories(catData);
     } catch (error) {
-      alert('Gagal mengambil data produk: ' + error.message);
+      alert('Gagal mengambil data: ' + error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDeleteClick = (product) => {
+  // Product Delete handlers
+  const handleDeleteProductClick = (product) => {
     setProductToDelete(product);
     setDeleteModalOpen(true);
   };
 
-  const confirmDelete = async () => {
+  const confirmDeleteProduct = async () => {
     if (!productToDelete) return;
     try {
       await softDeleteProduct(productToDelete.id);
@@ -52,7 +73,168 @@ export default function ProductsList() {
     }
   };
 
+  // Category Modal handlers
+  const handleOpenCategoryModal = (mode, category = null) => {
+    setCategoryModalMode(mode);
+    if (category) {
+      setCurrentCategory({ ...category });
+    } else {
+      setCurrentCategory({ name: '', slug: '', description: '' });
+    }
+    setCategorySaveError(null);
+    setCategoryModalOpen(true);
+  };
+
+  const handleCloseCategoryModal = () => {
+    setCategoryModalOpen(false);
+    setCurrentCategory({ name: '', slug: '', description: '' });
+  };
+
+  const handleCategoryNameChange = (e) => {
+    const newName = e.target.value;
+    setCurrentCategory(prev => {
+      if (categoryModalMode === 'add') {
+        const newSlug = newName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+        return { ...prev, name: newName, slug: newSlug };
+      }
+      return { ...prev, name: newName };
+    });
+  };
+
+  const handleSaveCategory = async (e) => {
+    e.preventDefault();
+    if (!currentCategory.name || !currentCategory.slug) {
+      setCategorySaveError("Nama dan Slug wajib diisi.");
+      return;
+    }
+
+    try {
+      setCategorySaving(true);
+      setCategorySaveError(null);
+
+      if (categoryModalMode === 'add') {
+        await createCategory({
+          name: currentCategory.name,
+          slug: currentCategory.slug
+        });
+      } else {
+        await updateCategory(currentCategory.id, {
+          name: currentCategory.name,
+          slug: currentCategory.slug
+        });
+      }
+
+      const catData = await getCategories();
+      setCategories(catData);
+      handleCloseCategoryModal();
+    } catch (err) {
+      if (err.code === '23505') {
+        setCategorySaveError("Slug ini sudah digunakan oleh kategori lain. Gunakan slug yang unik.");
+      } else {
+        setCategorySaveError(err.message);
+      }
+    } finally {
+      setCategorySaving(false);
+    }
+  };
+
+  const handleDeleteCategory = async (id, name) => {
+    if (window.confirm(`Apakah Anda yakin ingin menghapus kategori "${name}"?\nPerhatian: Menghapus kategori dapat menyebabkan produk yang terkait kehilangan kategorinya.`)) {
+      try {
+        await deleteCategory(id);
+        const catData = await getCategories();
+        setCategories(catData);
+        if (selectedCategory === id) {
+          setSelectedCategory('');
+        }
+      } catch (err) {
+        alert("Gagal menghapus kategori: " + err.message);
+      }
+    }
+  };
+
+  const handleCategoryDragEnd = async (result) => {
+    if (!result.destination) return;
+    if (result.destination.index === result.source.index) return;
+    if (categorySearchQuery) {
+      alert("Harap hapus pencarian kategori sebelum mengatur ulang urutan.");
+      return;
+    }
+
+    const items = Array.from(categories);
+    const [reorderedItem] = items.splice(result.source.index, 1);
+    items.splice(result.destination.index, 0, reorderedItem);
+
+    setCategories(items);
+
+    const updates = items.map((item, index) => ({
+      id: item.id,
+      display_order: index + 1
+    }));
+
+    try {
+      await updateCategoryOrders(updates);
+    } catch (err) {
+      console.error("Failed to save new order", err);
+      alert("Gagal menyimpan urutan baru ke database.");
+      const catData = await getCategories();
+      setCategories(catData);
+    }
+  };
+
+  const handleProductDragEnd = async (result) => {
+    if (!result.destination) return;
+    if (result.destination.index === result.source.index) return;
+    if (searchTerm) {
+      alert("Harap hapus pencarian produk sebelum mengatur ulang urutan.");
+      return;
+    }
+
+    const items = Array.from(paginatedProducts);
+    const [reorderedItem] = items.splice(result.source.index, 1);
+    items.splice(result.destination.index, 0, reorderedItem);
+
+    const startOrder = (currentPage - 1) * itemsPerPage;
+    const updatedItems = items.map((item, index) => ({
+      ...item,
+      display_order: startOrder + index + 1
+    }));
+
+    const updatedMap = new Map(updatedItems.map(p => [p.id, p]));
+    const newProducts = products.map(p => {
+      if (updatedMap.has(p.id)) return updatedMap.get(p.id);
+      return p;
+    });
+
+    newProducts.sort((a, b) => {
+      if (a.display_order !== b.display_order) {
+        return a.display_order - b.display_order;
+      }
+      return new Date(b.created_at) - new Date(a.created_at);
+    });
+
+    setProducts(newProducts);
+
+    const updates = updatedItems.map(p => ({
+      id: p.id,
+      display_order: p.display_order
+    }));
+
+    try {
+      await updateProductOrders(updates);
+    } catch (err) {
+      console.error("Failed to save new product order", err);
+      alert("Gagal menyimpan urutan baru produk ke database.");
+      fetchData();
+    }
+  };
+
   // Filter Logic
+  const filteredCategories = categories.filter(c => 
+    c.name.toLowerCase().includes(categorySearchQuery.toLowerCase()) ||
+    c.slug.toLowerCase().includes(categorySearchQuery.toLowerCase())
+  );
+
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory ? p.category_id === selectedCategory : true;
@@ -68,170 +250,425 @@ export default function ProductsList() {
 
   return (
     <div className="space-y-6">
+      {/* Page Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Manajemen Produk</h1>
-          <p className="text-gray-500 dark:text-zinc-400 text-sm mt-1">Kelola katalog produk, varian, dan inventaris toko.</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Manajemen Produk & Kategori</h1>
+          <p className="text-gray-500 dark:text-zinc-400 text-sm mt-1">Kelola katalog produk, varian, dan kategori toko dalam satu tempat.</p>
         </div>
-        <Link 
-          to="/products/create"
-          className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-400 text-black px-4 py-2 rounded-lg font-bold transition-colors"
-        >
-          <Plus size={18} /> Tambah Produk
-        </Link>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => handleOpenCategoryModal('add')}
+            className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 px-4 py-2 rounded-lg font-bold transition-colors text-sm"
+          >
+            <Plus size={16} /> Tambah Kategori
+          </button>
+          <Link 
+            to="/products/create"
+            className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-400 text-black px-4 py-2 rounded-lg font-bold transition-colors text-sm"
+          >
+            <Plus size={16} /> Tambah Produk
+          </Link>
+        </div>
       </div>
 
-      <div className="bg-white dark:bg-zinc-900/50 rounded-2xl border border-gray-200 dark:border-zinc-800 p-6 shadow-sm dark:shadow-none">
-        {/* Filters */}
-        <div className="flex flex-col md:flex-row gap-4 mb-6">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-zinc-500" size={18} />
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Column: Categories Panel */}
+        <div className="lg:col-span-4 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl p-5 shadow-sm dark:shadow-none h-fit">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-zinc-100 flex items-center gap-2">
+              <Tag className="text-yellow-500" size={18} />
+              Daftar Kategori
+            </h2>
+            <span className="text-xs text-gray-400 dark:text-zinc-550 select-none">Tarik & lepas untuk urutan</span>
+          </div>
+
+          {/* Category Search */}
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-zinc-500" size={16} />
             <input 
               type="text" 
-              placeholder="Cari nama produk..." 
-              value={searchTerm}
-              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-              className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:border-yellow-500 transition-colors"
+              placeholder="Cari kategori..." 
+              value={categorySearchQuery}
+              onChange={(e) => setCategorySearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:border-yellow-500 transition-colors"
             />
           </div>
-          <select 
-            value={selectedCategory}
-            onChange={(e) => { setSelectedCategory(e.target.value); setCurrentPage(1); }}
-            className="px-4 py-2 bg-gray-50 dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:border-yellow-500 transition-colors w-full md:w-64 appearance-none"
-          >
-            <option value="">Semua Kategori</option>
-            {categories.map(cat => (
-              <option key={cat.id} value={cat.id}>{cat.name}</option>
-            ))}
-          </select>
-        </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-zinc-800 text-yellow-600 dark:text-yellow-500 text-sm">
-                <th className="pb-3 font-medium px-4">No</th>
-                <th className="pb-3 font-medium px-4">Nama Produk</th>
-                <th className="pb-3 font-medium px-4">Kategori</th>
-                <th className="pb-3 font-medium px-4">Harga</th>
-                <th className="pb-3 font-medium px-4">Stok</th>
-                <th className="pb-3 font-medium px-4">Terjual</th>
-                <th className="pb-3 font-medium px-4">Status</th>
-                <th className="pb-3 font-medium px-4 text-right">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="text-sm">
-              {loading ? (
-                <tr>
-                  <td colSpan="7" className="text-center py-10 text-gray-500 dark:text-zinc-500">Memuat data produk...</td>
-                </tr>
-              ) : paginatedProducts.length === 0 ? (
-                <tr>
-                  <td colSpan="8" className="text-center py-10 text-gray-500 dark:text-zinc-500">Tidak ada produk ditemukan.</td>
-                </tr>
-              ) : (
-                paginatedProducts.map((product, index) => {
-                  // Calculate total stock from variants or fallback to product stock
-                  const totalStock = product.product_variants && product.product_variants.length > 0
-                    ? product.product_variants.reduce((acc, v) => acc + v.stock, 0)
-                    : product.stock;
-
-                  return (
-                    <tr key={product.id} className="border-b border-gray-100 dark:border-zinc-800/50 hover:bg-gray-50 dark:hover:bg-zinc-800/20 transition-colors">
-                      <td className="py-4 px-4 text-gray-500 dark:text-zinc-400">{(currentPage - 1) * itemsPerPage + index + 1}</td>
-                      <td className="py-4 px-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded bg-gray-100 dark:bg-zinc-800 shrink-0 overflow-hidden border border-gray-200 dark:border-zinc-700">
-                            {product.images && product.images[0] ? (
-                              <img src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
-                            ) : product.image_url ? (
-                              <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-400 dark:text-zinc-500">No Img</div>
-                            )}
-                          </div>
-                          <div>
-                            <div className="font-medium text-gray-900 dark:text-zinc-200">{product.name}</div>
-                            <div className="text-xs text-gray-500 dark:text-zinc-500">{product.product_variants?.length || 0} varian</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-4 px-4 text-gray-600 dark:text-zinc-300">{product.categories?.name || '-'}</td>
-                      <td className="py-4 px-4 text-gray-600 dark:text-zinc-300">Rp {product.price?.toLocaleString('id-ID')}</td>
-                      <td className="py-4 px-4">
+          {/* Category List with Drag and Drop */}
+          <div className="space-y-1 overflow-y-auto max-h-[500px] pr-1">
+            {loading ? (
+              <div className="py-8 text-center text-sm text-gray-500 dark:text-zinc-500">Memuat kategori...</div>
+            ) : (
+              <DragDropContext onDragEnd={handleCategoryDragEnd}>
+                <Droppable droppableId="categories">
+                  {(provided) => (
+                    <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-1">
+                      {/* "Semua Kategori" tab */}
+                      <div 
+                        onClick={() => {
+                          setSelectedCategory('');
+                          setCurrentPage(1);
+                        }}
+                        className={`flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition-all border ${
+                          selectedCategory === '' 
+                            ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-500 border-yellow-500/20 font-semibold' 
+                            : 'hover:bg-gray-50 dark:hover:bg-zinc-800/50 text-gray-700 dark:text-zinc-300 border-transparent'
+                        }`}
+                      >
                         <div className="flex items-center gap-2">
-                          <span className={`font-medium ${totalStock === 0 ? 'text-red-500 dark:text-red-400' : 'text-gray-600 dark:text-zinc-300'}`}>
-                            {totalStock}
-                          </span>
-                          {totalStock === 0 && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/20">
-                              Habis
-                            </span>
-                          )}
+                          <Tag size={16} className={selectedCategory === '' ? 'text-yellow-500' : 'text-gray-400'} />
+                          <span className="text-sm">Semua Kategori</span>
                         </div>
-                      </td>
-                      <td className="py-4 px-4 text-gray-600 dark:text-zinc-300">{product.sold_count ?? 0}</td>
-                      <td className="py-4 px-4">
-                        {product.is_active ? (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-500/20">Aktif</span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-500/20">Nonaktif</span>
-                        )}
-                      </td>
-                      <td className="py-4 px-4">
-                        <div className="flex justify-end gap-2">
-                          <Link 
-                            to={`/products/edit/${product.id}`}
-                            className="p-1.5 text-gray-400 dark:text-zinc-400 hover:text-yellow-600 dark:hover:text-yellow-500 bg-gray-100 dark:bg-zinc-800/50 hover:bg-gray-200 dark:hover:bg-zinc-800 rounded transition-colors"
-                            title="Edit"
-                          >
-                            <Edit size={16} />
-                          </Link>
-                          <button 
-                            onClick={() => handleDeleteClick(product)}
-                            className="p-1.5 text-gray-400 dark:text-zinc-400 hover:text-red-600 dark:hover:text-red-500 bg-gray-100 dark:bg-zinc-800/50 hover:bg-gray-200 dark:hover:bg-zinc-800 rounded transition-colors"
-                            title="Nonaktifkan (Soft Delete)"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                        <span className="text-xs bg-gray-100 dark:bg-zinc-850 text-gray-500 dark:text-zinc-400 px-2 py-0.5 rounded-full font-medium">
+                          {products.length}
+                        </span>
+                      </div>
+
+                      {/* Filtered categories */}
+                      {filteredCategories.length === 0 ? (
+                        <div className="py-4 text-center text-sm text-gray-500 dark:text-zinc-500">Tidak ada kategori</div>
+                      ) : (
+                        filteredCategories.map((category, index) => {
+                          const productCount = products.filter(p => p.category_id === category.id).length;
+                          const isSelected = selectedCategory === category.id;
+
+                          return (
+                            <Draggable key={category.id.toString()} draggableId={category.id.toString()} index={index}>
+                              {(provided, snapshot) => (
+                                <div
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  onClick={() => {
+                                    setSelectedCategory(category.id);
+                                    setCurrentPage(1);
+                                  }}
+                                  className={`flex items-center justify-between px-3 py-2.5 rounded-lg transition-all group border cursor-pointer ${
+                                    isSelected 
+                                      ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-500 border-yellow-500/20 font-semibold' 
+                                      : 'hover:bg-gray-50 dark:hover:bg-zinc-800/50 text-gray-700 dark:text-zinc-300 border-transparent'
+                                  } ${snapshot.isDragging ? 'bg-gray-100 dark:bg-zinc-800 shadow-md border-yellow-500/30' : ''}`}
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div 
+                                      className="text-gray-400 dark:text-zinc-600 hover:text-gray-600 dark:hover:text-zinc-400 cursor-grab"
+                                      {...provided.dragHandleProps}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <GripVertical size={16} />
+                                    </div>
+                                    <span 
+                                      className="truncate select-none text-sm"
+                                      title={category.name}
+                                    >
+                                      {category.name}
+                                    </span>
+                                  </div>
+                                  
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <span className="text-xs bg-gray-100 dark:bg-zinc-850 text-gray-500 dark:text-zinc-400 px-2 py-0.5 rounded-full font-medium group-hover:hidden">
+                                      {productCount}
+                                    </span>
+                                    
+                                    {/* Action buttons on hover */}
+                                    <div className="hidden group-hover:flex items-center gap-0.5">
+                                      <button 
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleOpenCategoryModal('edit', category);
+                                        }}
+                                        className="p-1 text-gray-400 hover:text-yellow-600 dark:hover:text-yellow-500 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded transition-colors"
+                                        title="Edit Kategori"
+                                      >
+                                        <Edit size={14} />
+                                      </button>
+                                      <button 
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteCategory(category.id, category.name);
+                                        }}
+                                        className="p-1 text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded transition-colors"
+                                        title="Hapus Kategori"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </Draggable>
+                          );
+                        })
+                      )}
+                      {provided.placeholder}
+                    </div>
+                  )}
+                </Droppable>
+              </DragDropContext>
+            )}
+          </div>
         </div>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-200 dark:border-zinc-800">
-            <span className="text-sm text-gray-500 dark:text-zinc-400">
-              Menampilkan {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, filteredProducts.length)} dari {filteredProducts.length} produk
-            </span>
-            <div className="flex gap-2">
-              <button 
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1 rounded bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-300 disabled:opacity-50 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors"
-              >
-                Prev
-              </button>
-              <button 
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1 rounded bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-300 disabled:opacity-50 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors"
-              >
-                Next
-              </button>
+        {/* Right Column: Products List Table */}
+        <div className="lg:col-span-8 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm dark:shadow-none">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                {selectedCategory 
+                  ? `Daftar Produk: ${categories.find(c => c.id === selectedCategory)?.name || ''}` 
+                  : 'Semua Produk'}
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">
+                Menampilkan {filteredProducts.length} produk.
+              </p>
+            </div>
+
+            {/* Product Search */}
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-zinc-500" size={16} />
+              <input 
+                type="text" 
+                placeholder="Cari nama produk..." 
+                value={searchTerm}
+                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:border-yellow-500 transition-colors"
+              />
             </div>
           </div>
-        )}
+
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <DragDropContext onDragEnd={handleProductDragEnd}>
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-zinc-800 text-yellow-600 dark:text-yellow-500 text-sm">
+                    <th className="pb-3 font-medium px-4 w-10"></th>
+                    <th className="pb-3 font-medium px-4">No</th>
+                    <th className="pb-3 font-medium px-4">Nama Produk</th>
+                    <th className="pb-3 font-medium px-4">Kategori</th>
+                    <th className="pb-3 font-medium px-4">Harga</th>
+                    <th className="pb-3 font-medium px-4">Stok</th>
+                    <th className="pb-3 font-medium px-4">Terjual</th>
+                    <th className="pb-3 font-medium px-4">Status</th>
+                    <th className="pb-3 font-medium px-4 text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <Droppable droppableId="products-list" type="PRODUCT">
+                  {(provided) => (
+                    <tbody 
+                      className="text-sm"
+                      {...provided.droppableProps}
+                      ref={provided.innerRef}
+                    >
+                      {loading ? (
+                        <tr>
+                          <td colSpan="9" className="text-center py-10 text-gray-500 dark:text-zinc-500">Memuat data produk...</td>
+                        </tr>
+                      ) : paginatedProducts.length === 0 ? (
+                        <tr>
+                          <td colSpan="9" className="text-center py-10 text-gray-500 dark:text-zinc-500">Tidak ada produk ditemukan.</td>
+                        </tr>
+                      ) : (
+                        paginatedProducts.map((product, index) => {
+                          const totalStock = product.product_variants && product.product_variants.length > 0
+                            ? product.product_variants.reduce((acc, v) => acc + v.stock, 0)
+                            : product.stock;
+
+                          return (
+                            <Draggable key={product.id.toString()} draggableId={product.id.toString()} index={index}>
+                              {(providedRow, snapshotRow) => (
+                                <tr 
+                                  ref={providedRow.innerRef}
+                                  {...providedRow.draggableProps}
+                                  className={`border-b border-gray-100 dark:border-zinc-800/50 hover:bg-gray-50 dark:hover:bg-zinc-800/20 transition-colors ${
+                                    snapshotRow.isDragging ? 'bg-gray-100 dark:bg-zinc-850 shadow-md' : ''
+                                  }`}
+                                >
+                                  <td className="py-4 px-4">
+                                    <div 
+                                      className="text-gray-400 dark:text-zinc-600 hover:text-gray-600 dark:hover:text-zinc-400 cursor-grab flex justify-center animate-pulse"
+                                      {...providedRow.dragHandleProps}
+                                    >
+                                      <GripVertical size={16} />
+                                    </div>
+                                  </td>
+                                  <td className="py-4 px-4 text-gray-500 dark:text-zinc-400">{(currentPage - 1) * itemsPerPage + index + 1}</td>
+                                  <td className="py-4 px-4">
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-10 h-10 rounded bg-gray-100 dark:bg-zinc-800 shrink-0 overflow-hidden border border-gray-200 dark:border-zinc-700">
+                                        {product.images && product.images[0] ? (
+                                          <img src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
+                                        ) : product.image_url ? (
+                                          <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+                                        ) : (
+                                          <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-400 dark:text-zinc-500">No Img</div>
+                                        )}
+                                      </div>
+                                      <div>
+                                        <div className="font-medium text-gray-900 dark:text-zinc-200">{product.name}</div>
+                                        <div className="text-xs text-gray-500 dark:text-zinc-500">{product.product_variants?.length || 0} varian</div>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="py-4 px-4 text-gray-600 dark:text-zinc-300">{product.categories?.name || '-'}</td>
+                                  <td className="py-4 px-4 text-gray-600 dark:text-zinc-300">Rp {product.price?.toLocaleString('id-ID')}</td>
+                                  <td className="py-4 px-4">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`font-medium ${totalStock === 0 ? 'text-red-500 dark:text-red-400' : 'text-gray-600 dark:text-zinc-300'}`}>
+                                        {totalStock}
+                                      </span>
+                                      {totalStock === 0 && (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/20">
+                                          Habis
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="py-4 px-4 text-gray-600 dark:text-zinc-300">{product.sold_count ?? 0}</td>
+                                  <td className="py-4 px-4">
+                                    {product.is_active ? (
+                                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-500/20">Aktif</span>
+                                    ) : (
+                                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-500/20">Nonaktif</span>
+                                    )}
+                                  </td>
+                                  <td className="py-4 px-4">
+                                    <div className="flex justify-end gap-2">
+                                      <Link 
+                                        to={`/products/edit/${product.id}`}
+                                        className="p-1.5 text-gray-400 dark:text-zinc-400 hover:text-yellow-600 dark:hover:text-yellow-500 bg-gray-100 dark:bg-zinc-800/50 hover:bg-gray-200 dark:hover:bg-zinc-800 rounded transition-colors"
+                                        title="Edit Produk"
+                                      >
+                                        <Edit size={16} />
+                                      </Link>
+                                      <button 
+                                        onClick={() => handleDeleteProductClick(product)}
+                                        className="p-1.5 text-gray-400 dark:text-zinc-400 hover:text-red-600 dark:hover:text-red-500 bg-gray-100 dark:bg-zinc-800/50 hover:bg-gray-200 dark:hover:bg-zinc-800 rounded transition-colors"
+                                        title="Nonaktifkan Produk"
+                                      >
+                                        <Trash2 size={16} />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </Draggable>
+                          );
+                        })
+                      )}
+                      {provided.placeholder}
+                    </tbody>
+                  )}
+                </Droppable>
+              </table>
+            </DragDropContext>
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-200 dark:border-zinc-800">
+              <span className="text-sm text-gray-500 dark:text-zinc-400">
+                Menampilkan {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, filteredProducts.length)} dari {filteredProducts.length} produk
+              </span>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 rounded bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-300 disabled:opacity-50 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors"
+                >
+                  Prev
+                </button>
+                <button 
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 rounded bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-300 disabled:opacity-50 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
+      {/* Category Add/Edit Modal */}
+      {categoryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleCloseCategoryModal}></div>
+          <div className="relative bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-zinc-800">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-zinc-100">
+                {categoryModalMode === 'add' ? 'Tambah Kategori' : 'Edit Kategori'}
+              </h2>
+              <button 
+                onClick={handleCloseCategoryModal}
+                className="text-gray-500 dark:text-zinc-500 hover:text-gray-800 dark:hover:text-zinc-300 transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCategory} className="p-6 space-y-5">
+              
+              {categorySaveError && (
+                <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm flex items-start gap-2">
+                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                  <p>{categorySaveError}</p>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-zinc-400 block">Nama Kategori <span className="text-red-500">*</span></label>
+                <input 
+                  type="text" 
+                  value={currentCategory.name}
+                  onChange={handleCategoryNameChange}
+                  className="w-full bg-gray-50 dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-gray-900 dark:text-zinc-200 focus:outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 transition-colors"
+                  placeholder="Contoh: Sarung Batik"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-zinc-400 block">Slug (URL) <span className="text-red-500">*</span></label>
+                <input 
+                  type="text" 
+                  value={currentCategory.slug}
+                  onChange={(e) => setCurrentCategory({...currentCategory, slug: e.target.value.toLowerCase().replace(/\s+/g, '-')})}
+                  className="w-full bg-gray-50 dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-gray-900 dark:text-zinc-200 font-mono text-sm focus:outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 transition-colors"
+                  placeholder="contoh: sarung-batik"
+                  required
+                />
+                <p className="text-xs text-gray-500 dark:text-zinc-500">Gunakan huruf kecil, angka, dan strip (-). Hindari spasi.</p>
+              </div>
+
+
+
+              <div className="pt-4 flex justify-end gap-3">
+                <button 
+                  type="button" 
+                  onClick={handleCloseCategoryModal}
+                  className="px-5 py-2.5 rounded-lg text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-200 hover:bg-gray-100 dark:hover:bg-zinc-800 font-medium transition-colors"
+                >
+                  Batal
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={categorySaving}
+                  className="bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed text-black px-6 py-2.5 rounded-lg font-medium transition-colors flex items-center gap-2"
+                >
+                  {categorySaving && <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin"></div>}
+                  {categorySaving ? 'Menyimpan...' : 'Simpan Kategori'}
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Product Delete Confirmation Modal */}
       {deleteModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl shadow-2xl p-6 max-w-sm w-full">
@@ -250,7 +687,7 @@ export default function ProductsList() {
                 Batal
               </button>
               <button 
-                onClick={confirmDelete}
+                onClick={confirmDeleteProduct}
                 className="px-4 py-2 rounded-lg font-medium text-white bg-red-600 hover:bg-red-700 transition-colors"
               >
                 Ya, Hapus

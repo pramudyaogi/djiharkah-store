@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Upload, Save, X } from 'lucide-react';
-import { getProductById, getCategories, createProduct, updateProduct, uploadProductImage } from '../services/products';
+import { ArrowLeft, Upload, Save, X, GripVertical } from 'lucide-react';
+import { getProductById, getCategories, getProducts, createProduct, updateProduct, uploadProductImage } from '../services/products';
+import { useToast } from '../contexts/ToastContext';
 
 export default function ProductForm() {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEdit = Boolean(id);
+  const { showToast } = useToast();
 
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(isEdit);
   const [categories, setCategories] = useState([]);
+  const [existingProducts, setExistingProducts] = useState([]);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -19,22 +22,37 @@ export default function ProductForm() {
     category_id: '',
     product_type: 'Stokis',
     price: '',
+    original_price: '',
+    discount_percent: '0',
     stock: '',
     description: '',
     is_active: true,
     free_shipping: true,
+    is_exclusive: false,
   });
 
-  // Image State (Single Image)
-  const [existingImage, setExistingImage] = useState(null); // URL from DB
-  const [newImage, setNewImage] = useState(null); // File object
-  const [previewUrl, setPreviewUrl] = useState(null); // Object URL for preview
+  // Validation State
+  const [validationErrors, setValidationErrors] = useState({
+    name: '',
+    slug: ''
+  });
+
+  // Images State (Max 5)
+  const [imagesList, setImagesList] = useState([]);
+  const [draggedIndex, setDraggedIndex] = useState(null);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const catData = await getCategories();
+        const [catData, prodList] = await Promise.all([
+          getCategories(),
+          getProducts()
+        ]);
         setCategories(catData);
+        
+        // Filter out current product if editing
+        const filteredProds = isEdit ? prodList.filter(p => p.id !== id) : prodList;
+        setExistingProducts(filteredProds);
 
         if (isEdit) {
           const product = await getProductById(id);
@@ -44,20 +62,33 @@ export default function ProductForm() {
             category_id: product.category_id || '',
             product_type: product.product_type || 'Stokis',
             price: product.price || '',
+            original_price: product.original_price || product.price || '',
+            discount_percent: product.discount_percent || '0',
             stock: product.stock || '',
             description: product.description || '',
             is_active: product.is_active,
             free_shipping: product.free_shipping ?? true,
+            is_exclusive: product.is_exclusive ?? false,
           });
           
-          if (product.image_url) {
-            setExistingImage(product.image_url);
-          } else if (product.images && product.images.length > 0) { // Fallback for old schema
-            setExistingImage(product.images[0]);
+          let initialImages = [];
+          if (product.images && product.images.length > 0) {
+            initialImages = product.images.map((imgUrl, idx) => ({
+              id: `existing-${idx}`,
+              url: imgUrl,
+              file: null
+            }));
+          } else if (product.image_url) {
+            initialImages = [{
+              id: 'existing-0',
+              url: product.image_url,
+              file: null
+            }];
           }
+          setImagesList(initialImages);
         }
       } catch (error) {
-        alert('Gagal memuat data: ' + error.message);
+        showToast('Gagal memuat data: ' + error.message, 'error');
         navigate('/products');
       } finally {
         setInitialLoading(false);
@@ -66,14 +97,71 @@ export default function ProductForm() {
     loadData();
   }, [id, isEdit, navigate]);
 
+  // Validation functions
+  const validateFields = (nameVal, slugVal, currentProds = existingProducts) => {
+    const errors = { name: '', slug: '' };
+    
+    if (nameVal.trim()) {
+      const nameExists = currentProds.some(p => p.name.toLowerCase().trim() === nameVal.toLowerCase().trim());
+      if (nameExists) {
+        errors.name = 'Nama produk sudah terdaftar. Silakan gunakan nama produk yang unik.';
+      }
+    }
+    
+    if (slugVal.trim()) {
+      const slugExists = currentProds.some(p => p.slug.toLowerCase().trim() === slugVal.toLowerCase().trim());
+      if (slugExists) {
+        errors.slug = 'Slug URL sudah terdaftar. Silakan gunakan Slug URL yang unik.';
+      }
+    }
+    
+    setValidationErrors(errors);
+  };
+
+  const generateUniqueSlug = (nameVal, currentProds = existingProducts) => {
+    let baseSlug = nameVal.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+    if (!baseSlug) return '';
+    
+    let uniqueSlug = baseSlug;
+    let counter = 2;
+    
+    while (currentProds.some(p => p.slug === uniqueSlug)) {
+      uniqueSlug = `${baseSlug}-${counter}`;
+      counter++;
+    }
+    
+    return uniqueSlug;
+  };
+
   // Handlers
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     
-    // Auto generate slug from name
-    if (name === 'name' && !isEdit) {
-      const slug = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
-      setFormData(prev => ({ ...prev, name: value, slug }));
+    if (name === 'name') {
+      if (!isEdit) {
+        const uniqueSlug = generateUniqueSlug(value);
+        setFormData(prev => {
+          const updated = { ...prev, name: value, slug: uniqueSlug };
+          validateFields(value, uniqueSlug);
+          return updated;
+        });
+      } else {
+        setFormData(prev => {
+          const updated = { ...prev, name: value };
+          validateFields(value, prev.slug);
+          return updated;
+        });
+      }
+      return;
+    }
+
+    if (name === 'slug') {
+      const cleanSlug = value.toLowerCase().replace(/\s+/g, '-');
+      setFormData(prev => {
+        const updated = { ...prev, slug: cleanSlug };
+        validateFields(prev.name, cleanSlug);
+        return updated;
+      });
       return;
     }
 
@@ -83,38 +171,177 @@ export default function ProductForm() {
     }));
   };
 
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const handlePriceChange = (e) => {
+    const { name, value } = e.target;
     
-    setNewImage(file);
-    
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(URL.createObjectURL(file));
+    setFormData(prev => {
+      const updated = { ...prev, [name]: value };
+      
+      const origPriceVal = name === 'original_price' ? value : prev.original_price;
+      const sellPriceVal = name === 'price' ? value : prev.price;
+      const discPercentVal = name === 'discount_percent' ? value : prev.discount_percent;
+
+      const origPrice = parseFloat(origPriceVal) || 0;
+      const sellPrice = parseFloat(sellPriceVal) || 0;
+      const discPercent = parseFloat(discPercentVal) || 0;
+
+      if (name === 'original_price') {
+        if (value === '') {
+          updated.price = '';
+          updated.discount_percent = '0';
+        } else if (origPrice > 0) {
+          if (discPercentVal !== '' && discPercent > 0) {
+            const calculatedPrice = Math.round(origPrice - (origPrice * (discPercent / 100)));
+            updated.price = calculatedPrice.toString();
+          } else if (sellPriceVal !== '' && sellPrice > 0) {
+            const calculatedDisc = Math.round(((origPrice - sellPrice) / origPrice) * 100);
+            updated.discount_percent = Math.max(0, calculatedDisc).toString();
+          }
+        }
+      } 
+      else if (name === 'price') {
+        if (value === '') {
+          updated.discount_percent = '0';
+        } else if (origPrice > 0) {
+          const calculatedDisc = Math.round(((origPrice - sellPrice) / origPrice) * 100);
+          updated.discount_percent = Math.max(0, calculatedDisc).toString();
+        }
+      } 
+      else if (name === 'discount_percent') {
+        if (value === '') {
+          updated.price = origPriceVal;
+        } else if (origPrice > 0) {
+          const calculatedPrice = Math.round(origPrice - (origPrice * (discPercent / 100)));
+          updated.price = calculatedPrice.toString();
+        }
+      }
+
+      return updated;
+    });
   };
 
-  const removeImage = () => {
-    setNewImage(null);
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(null);
-    setExistingImage(null);
+  const handleImageChange = (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+
+    setImagesList(prev => {
+      const remainingSlots = 5 - prev.length;
+      if (remainingSlots <= 0) {
+        showToast('Maksimal 5 foto per produk', 'warning');
+        return prev;
+      }
+      
+      const newItems = files.slice(0, remainingSlots).map((file, idx) => ({
+        id: `new-${Date.now()}-${idx}`,
+        url: URL.createObjectURL(file),
+        file: file
+      }));
+      
+      return [...prev, ...newItems];
+    });
+    
+    e.target.value = '';
+  };
+
+  const removeImage = (idToRemove) => {
+    setImagesList(prev => {
+      const itemToRemove = prev.find(item => item.id === idToRemove);
+      if (itemToRemove && itemToRemove.file && itemToRemove.url) {
+        URL.revokeObjectURL(itemToRemove.url);
+      }
+      return prev.filter(item => item.id !== idToRemove);
+    });
+  };
+
+  const handleDragStart = (e, index) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+    
+    const newList = [...imagesList];
+    const draggedItem = newList[draggedIndex];
+    newList.splice(draggedIndex, 1);
+    newList.splice(index, 0, draggedItem);
+    
+    setDraggedIndex(index);
+    setImagesList(newList);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!existingImage && !newImage) {
-      alert('Wajib upload 1 foto utama produk');
+
+    // Custom client-side validation to avoid browser tooltips
+    if (!formData.name.trim()) {
+      showToast('Nama Produk wajib diisi', 'warning');
+      return;
+    }
+    if (!formData.slug.trim()) {
+      showToast('Slug URL wajib diisi', 'warning');
+      return;
+    }
+    if (!formData.category_id) {
+      showToast('Silakan pilih Kategori produk', 'warning');
+      return;
+    }
+    if (!formData.product_type) {
+      showToast('Tipe Produk wajib diisi', 'warning');
+      return;
+    }
+    if (!formData.original_price) {
+      showToast('Harga Asli wajib diisi', 'warning');
+      return;
+    }
+    if (!formData.price) {
+      showToast('Harga Penjualan wajib diisi', 'warning');
+      return;
+    }
+    if (formData.stock === '' || formData.stock === undefined || formData.stock === null) {
+      showToast('Stok Utama wajib diisi', 'warning');
+      return;
+    }
+    if (imagesList.length === 0) {
+      showToast('Wajib upload minimal 1 foto produk', 'warning');
+      return;
+    }
+
+    if (validationErrors.name || validationErrors.slug) {
+      showToast('Harap perbaiki kesalahan input nama atau slug yang terduplikasi.', 'warning');
+      return;
+    }
+
+    const nameExists = existingProducts.some(p => p.name.toLowerCase().trim() === formData.name.toLowerCase().trim());
+    if (nameExists) {
+      showToast('Nama produk sudah terdaftar. Silakan gunakan nama produk lain yang unik.', 'warning');
+      return;
+    }
+
+    const slugExists = existingProducts.some(p => p.slug.toLowerCase().trim() === formData.slug.toLowerCase().trim());
+    if (slugExists) {
+      showToast('Slug URL sudah terdaftar. Silakan gunakan Slug URL lain yang unik.', 'warning');
       return;
     }
 
     setLoading(true);
     try {
-      let finalImageUrl = existingImage;
-
-      // 1. Upload new image if exists
-      if (newImage) {
-        finalImageUrl = await uploadProductImage(newImage);
-      }
+      // 1. Upload new images if they exist
+      const uploadPromises = imagesList.map(async (item) => {
+        if (item.file) {
+          const uploadedUrl = await uploadProductImage(item.file);
+          return uploadedUrl;
+        }
+        return item.url;
+      });
+      
+      const finalImageUrls = await Promise.all(uploadPromises);
+      const firstImageUrl = finalImageUrls[0] || null;
 
       // 2. Prepare payload
       const payload = {
@@ -122,24 +349,34 @@ export default function ProductForm() {
         slug: formData.slug,
         category_id: formData.category_id,
         product_type: formData.product_type,
-        price: parseFloat(formData.price),
+        price: parseFloat(formData.price || formData.original_price),
+        original_price: parseFloat(formData.original_price),
+        discount_percent: parseInt(formData.discount_percent || 0),
         stock: parseInt(formData.stock || 0),
         description: formData.description,
         is_active: formData.is_active,
         free_shipping: formData.free_shipping,
-        image_url: finalImageUrl
+        is_exclusive: formData.is_exclusive,
+        image_url: firstImageUrl,
+        images: finalImageUrls
       };
 
       // 3. Save to DB
       if (isEdit) {
         await updateProduct(id, payload);
+        showToast('Produk berhasil diperbarui!', 'success');
       } else {
         await createProduct(payload);
+        showToast('Produk baru berhasil ditambahkan!', 'success');
       }
 
       navigate('/products');
     } catch (error) {
-      alert('Gagal menyimpan produk: ' + error.message);
+      if (error.code === '23505' || (error.message && error.message.includes('products_slug_key'))) {
+        showToast('Slug URL ini sudah digunakan oleh produk lain. Silakan ubah sedikit kolom "Slug URL" agar unik.', 'error');
+      } else {
+        showToast('Gagal menyimpan produk: ' + error.message, 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -149,7 +386,6 @@ export default function ProductForm() {
     return <div className="text-gray-400 dark:text-zinc-500 py-10 text-center">Memuat data form...</div>;
   }
 
-  const currentDisplayImage = previewUrl || existingImage;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-20">
@@ -166,7 +402,7 @@ export default function ProductForm() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-8">
+      <form onSubmit={handleSubmit} noValidate className="space-y-8">
         
         {/* Basic Info */}
         <div className="bg-gray-50/50 dark:bg-zinc-900/50 border border-gray-200 dark:border-zinc-800 rounded-2xl p-6 space-y-6">
@@ -177,16 +413,30 @@ export default function ProductForm() {
               <label className="text-sm font-medium text-gray-700 dark:text-zinc-300">Nama Produk *</label>
               <input 
                 type="text" required name="name" value={formData.name} onChange={handleInputChange}
-                className="w-full bg-white dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-lg px-4 py-2.5 text-gray-900 dark:text-white focus:border-yellow-500 focus:outline-none transition-colors"
+                className={`w-full bg-white dark:bg-zinc-950 border rounded-lg px-4 py-2.5 text-gray-900 dark:text-white focus:outline-none transition-colors ${
+                  validationErrors.name 
+                    ? 'border-red-500 focus:border-red-500 ring-1 ring-red-500/20' 
+                    : 'border-gray-200 dark:border-zinc-800 focus:border-yellow-500'
+                }`}
                 placeholder="Misal: Sarung BHS Masterpiece Royal Blue"
               />
+              {validationErrors.name && (
+                <p className="text-xs text-red-500 font-medium">{validationErrors.name}</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-gray-700 dark:text-zinc-300">Slug URL *</label>
               <input 
                 type="text" required name="slug" value={formData.slug} onChange={handleInputChange}
-                className="w-full bg-white dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-lg px-4 py-2.5 text-gray-500 dark:text-zinc-400 focus:border-yellow-500 focus:outline-none transition-colors"
+                className={`w-full bg-white dark:bg-zinc-950 border rounded-lg px-4 py-2.5 text-gray-500 dark:text-zinc-450 focus:outline-none transition-colors ${
+                  validationErrors.slug 
+                    ? 'border-red-500 focus:border-red-500 ring-1 ring-red-500/20' 
+                    : 'border-gray-200 dark:border-zinc-800 focus:border-yellow-500'
+                }`}
               />
+              {validationErrors.slug && (
+                <p className="text-xs text-red-500 font-medium">{validationErrors.slug}</p>
+              )}
             </div>
             
             <div className="space-y-1.5">
@@ -216,11 +466,29 @@ export default function ProductForm() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700 dark:text-zinc-300">Harga Dasar (Rp) *</label>
+              <label className="text-sm font-medium text-gray-700 dark:text-zinc-300">Harga Asli (Rp) *</label>
               <input 
-                type="number" required min="0" name="price" value={formData.price} onChange={handleInputChange}
+                type="number" required min="0" name="original_price" value={formData.original_price} onChange={handlePriceChange}
                 className="w-full bg-white dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-lg px-4 py-2.5 text-gray-900 dark:text-white focus:border-yellow-500 focus:outline-none transition-colors"
-                placeholder="0"
+                placeholder="Misal: 500000"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700 dark:text-zinc-300">Diskon (%)</label>
+              <input 
+                type="number" min="0" max="100" name="discount_percent" value={formData.discount_percent} onChange={handlePriceChange}
+                className="w-full bg-white dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-lg px-4 py-2.5 text-gray-900 dark:text-white focus:border-yellow-500 focus:outline-none transition-colors"
+                placeholder="Misal: 10"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700 dark:text-zinc-300">Harga Penjualan (Rp) *</label>
+              <input 
+                type="number" required min="0" name="price" value={formData.price} onChange={handlePriceChange}
+                className="w-full bg-white dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-lg px-4 py-2.5 text-gray-900 dark:text-white focus:border-yellow-500 focus:outline-none transition-colors"
+                placeholder="Misal: 450000"
               />
             </div>
 
@@ -267,29 +535,84 @@ export default function ProductForm() {
               </div>
             </label>
           </div>
+
+          {/* Exclusive Choice Toggle */}
+          <div className="flex items-center justify-between p-4 bg-white dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-xl">
+            <div>
+              <div className="font-semibold text-gray-800 dark:text-zinc-200 flex items-center gap-2">
+                <span className="text-yellow-500">✨</span> Pilihan Eksklusif
+              </div>
+              <div className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">
+                {formData.is_exclusive ? 'Produk ini akan ditampilkan di section Pilihan Eksklusif halaman utama' : 'Produk biasa'}
+              </div>
+            </div>
+            <label className="flex items-center cursor-pointer">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  name="is_exclusive"
+                  checked={formData.is_exclusive}
+                  onChange={(e) => setFormData(prev => ({ ...prev, is_exclusive: e.target.checked }))}
+                  className="sr-only"
+                />
+                <div className={`block w-14 h-8 rounded-full transition-colors ${formData.is_exclusive ? 'bg-yellow-500' : 'bg-gray-300 dark:bg-zinc-700'}`}></div>
+                <div className={`absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform shadow ${formData.is_exclusive ? 'translate-x-6' : ''}`}></div>
+              </div>
+            </label>
+          </div>
         </div>
 
         {/* Upload Image */}
         <div className="bg-gray-50/50 dark:bg-zinc-900/50 border border-gray-200 dark:border-zinc-800 rounded-2xl p-6 space-y-6">
           <div className="flex justify-between items-center border-b border-gray-200 dark:border-zinc-800 pb-3">
-            <h2 className="text-lg font-bold text-yellow-500">Foto Utama Produk</h2>
-            <span className="text-xs text-gray-500 dark:text-zinc-400">1 Foto per Produk (Berdasarkan Motif/Warna)</span>
+            <h2 className="text-lg font-bold text-yellow-500">Foto Galeri Produk</h2>
+            <span className="text-xs text-gray-500 dark:text-zinc-400">Bisa upload hingga 5 Foto (Maks 5MB per file)</span>
           </div>
 
           <div className="flex flex-wrap gap-4">
-            {currentDisplayImage ? (
-              <div className="relative w-48 h-48 rounded-xl overflow-hidden border border-yellow-500/50 group">
-                <img src={currentDisplayImage} alt="Preview" className="w-full h-full object-cover" />
-                <button type="button" onClick={removeImage} className="absolute top-2 right-2 p-1.5 bg-red-500/80 hover:bg-red-500 text-white rounded-lg transition-colors shadow-lg">
-                  <X size={18} />
+            {imagesList.map((item, index) => (
+              <div 
+                key={item.id} 
+                draggable={true}
+                onDragStart={(e) => handleDragStart(e, index)}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDragEnd={handleDragEnd}
+                className={`relative w-36 h-36 rounded-xl overflow-hidden border group shadow-sm bg-gray-50 dark:bg-zinc-950 cursor-grab active:cursor-grabbing transition-all select-none ${
+                  index === 0 
+                    ? 'border-yellow-500 ring-2 ring-yellow-500/20' 
+                    : 'border-gray-200 dark:border-zinc-800 hover:border-yellow-500/50'
+                } ${draggedIndex === index ? 'opacity-40 scale-95 border-dashed' : ''}`}
+              >
+                <img src={item.url} alt="Preview" className="w-full h-full object-cover pointer-events-none" />
+                
+                {/* Drag handle overlay */}
+                <div className="absolute top-2 left-2 p-1 bg-black/40 backdrop-blur-sm rounded text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                  <GripVertical size={12} />
+                </div>
+
+                {/* Main Photo Badge */}
+                {index === 0 && (
+                  <div className="absolute bottom-2 left-2 bg-yellow-500 text-hitam text-[10px] font-bold px-2 py-0.5 rounded shadow-sm pointer-events-none">
+                    Utama
+                  </div>
+                )}
+
+                <button 
+                  type="button" 
+                  onClick={() => removeImage(item.id)} 
+                  className="absolute top-2 right-2 p-1.5 bg-red-500/80 hover:bg-red-600 text-white rounded-lg transition-colors shadow-lg z-10"
+                >
+                  <X size={14} />
                 </button>
               </div>
-            ) : (
-              <label className="w-48 h-48 rounded-xl border-2 border-dashed border-gray-300 dark:border-zinc-700 hover:border-yellow-500 flex flex-col items-center justify-center text-zinc-500 hover:text-yellow-500 cursor-pointer transition-colors bg-white/50 dark:bg-zinc-950/50">
-                <Upload size={32} className="mb-3" />
-                <span className="text-sm font-medium">Upload Foto</span>
-                <span className="text-xs mt-1 text-gray-400 dark:text-zinc-600">JPG, PNG (Max 5MB)</span>
-                <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+            ))}
+            
+            {imagesList.length < 5 && (
+              <label className="w-36 h-36 rounded-xl border-2 border-dashed border-gray-300 dark:border-zinc-700 hover:border-yellow-500 flex flex-col items-center justify-center text-zinc-500 hover:text-yellow-500 cursor-pointer transition-colors bg-white/50 dark:bg-zinc-950/50">
+                <Upload size={24} className="mb-2" />
+                <span className="text-xs font-semibold">Upload Foto</span>
+                <span className="text-[10px] mt-0.5 text-gray-400 dark:text-zinc-600">({imagesList.length}/5)</span>
+                <input type="file" multiple accept="image/*" onChange={handleImageChange} className="hidden" />
               </label>
             )}
           </div>
