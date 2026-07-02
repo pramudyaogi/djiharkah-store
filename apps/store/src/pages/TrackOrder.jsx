@@ -2,8 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Package, Truck, CheckCircle, Clock, Search, AlertCircle, ChevronLeft } from 'lucide-react';
+import useCurrencyStore from '../store/useCurrencyStore';
+import { formatPrice } from '../utils/currencyHelper';
+import { useTranslation } from '../utils/translations';
 
 export default function TrackOrder() {
+  const { currency, rates } = useCurrencyStore();
+  const { t, language } = useTranslation();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const initialCode = searchParams.get('code') || '';
@@ -41,24 +46,33 @@ export default function TrackOrder() {
 
   const handleWhatsAppOrderInquiry = () => {
     const cleanedPhone = cleanPhoneForWhatsApp(storePhone || '6281234567890');
-    const message = `Assalamualaikum Djiharkah Store.\nSaya ingin menanyakan pesanan saya:\n- Kode Pesanan: ${order.tracking_code}\n- Status: ${getStatusDisplay(order.status).label}\n- Penerima: ${getRecipientName()}\n- Total Pembayaran: Rp ${order.total_amount.toLocaleString('id-ID')}`;
+    const statusLabel = getStatusDisplay(order.status).label;
+    const recipientName = getRecipientName();
+    const totalPaymentVal = formatPrice(order.total_amount, currency, rates);
+    
+    const message = t('wa_track_greeting', {
+      code: order.tracking_code,
+      status: statusLabel,
+      recipient: recipientName,
+      total: totalPaymentVal
+    });
     window.open(`https://wa.me/${cleanedPhone}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
   const handleConfirmReceived = async () => {
-    if (!window.confirm('Apakah Anda yakin pesanan sudah sampai dan diterima dengan baik?')) return;
+    if (!window.confirm(t('confirm_received_prompt'))) return;
     setConfirming(true);
     try {
       const { error } = await supabase.rpc('confirm_order_delivery', {
         p_tracking_code: order.tracking_code
       });
       if (error) throw error;
-      alert('Terima kasih! Pesanan Anda telah dinyatakan selesai.');
+      alert(t('confirm_received_success'));
       // Refresh order details
       await handleSearch(null, order.tracking_code);
     } catch (err) {
       console.error(err);
-      alert('Gagal mengonfirmasi penerimaan: ' + err.message);
+      alert(t('confirm_received_failed') + ' ' + err.message);
     } finally {
       setConfirming(false);
     }
@@ -99,12 +113,12 @@ export default function TrackOrder() {
 
       if (error) throw error;
       if (!data) {
-        throw new Error("Pesanan dengan kode resi tersebut tidak ditemukan.");
+        throw new Error(t('order_not_found'));
       }
 
       setOrder(data);
     } catch (err) {
-      setError(err.message || 'Gagal melacak pesanan.');
+      setError(err.message || t('track_failed'));
     } finally {
       setLoading(false);
     }
@@ -113,15 +127,15 @@ export default function TrackOrder() {
   const getStatusDisplay = (status) => {
     switch(status) {
       case 'pending':
-        return { label: 'Menunggu Konfirmasi', icon: <Clock size={40} />, color: 'text-yellow-500', bg: 'bg-yellow-50' };
+        return { label: t('status_pending'), icon: <Clock size={40} />, color: 'text-yellow-500', bg: 'bg-yellow-50' };
       case 'processing':
-        return { label: 'Sedang Diproses', icon: <Package size={40} />, color: 'text-blue-500', bg: 'bg-blue-50' };
+        return { label: t('status_processing'), icon: <Package size={40} />, color: 'text-blue-500', bg: 'bg-blue-50' };
       case 'shipped':
-        return { label: 'Dalam Pengiriman', icon: <Truck size={40} />, color: 'text-purple-500', bg: 'bg-purple-50' };
+        return { label: t('status_shipped'), icon: <Truck size={40} />, color: 'text-purple-500', bg: 'bg-purple-50' };
       case 'delivered':
-        return { label: 'Selesai', icon: <CheckCircle size={40} />, color: 'text-green-500', bg: 'bg-green-50' };
+        return { label: t('status_delivered'), icon: <CheckCircle size={40} />, color: 'text-green-500', bg: 'bg-green-50' };
       case 'cancelled':
-        return { label: 'Dibatalkan', icon: <AlertCircle size={40} />, color: 'text-red-500', bg: 'bg-red-50' };
+        return { label: t('status_cancelled'), icon: <AlertCircle size={40} />, color: 'text-red-500', bg: 'bg-red-50' };
       default:
         return { label: status, icon: <Package size={40} />, color: 'text-gray-500', bg: 'bg-gray-50' };
     }
@@ -132,11 +146,11 @@ export default function TrackOrder() {
       {/* Back Button */}
       <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-gray-500 hover:text-emas transition-colors mb-8 group">
         <ChevronLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-        Kembali
+        {t('back')}
       </button>
 
-      <h1 className="text-3xl font-playfair font-bold text-hitam mb-2 text-center">Lacak Pesanan Anda</h1>
-      <p className="text-center text-gray-500 mb-10">Masukkan kode pesanan yang Anda dapatkan saat checkout.</p>
+      <h1 className="text-3xl font-playfair font-bold text-hitam mb-2 text-center">{t('track_order_title')}</h1>
+      <p className="text-center text-gray-500 mb-10">{t('track_order_desc')}</p>
       
       {/* Search Bar */}
       <div className="max-w-xl mx-auto mb-12">
@@ -145,7 +159,7 @@ export default function TrackOrder() {
             type="text" 
             value={trackingCode}
             onChange={(e) => setTrackingCode(e.target.value.toUpperCase())}
-            placeholder="Contoh: ORD-240626" 
+            placeholder={t('track_placeholder')} 
             className="w-full px-4 sm:px-6 py-3 sm:py-4 pr-24 sm:pr-32 text-sm sm:text-lg font-mono tracking-wider sm:tracking-widest bg-white border-2 border-gray-200 rounded-full focus:outline-none focus:border-emas transition-colors uppercase shadow-sm"
           />
           <button 
@@ -153,7 +167,7 @@ export default function TrackOrder() {
             disabled={loading || !trackingCode}
             className="absolute right-1.5 top-1.5 bottom-1.5 px-4 sm:px-6 bg-emas text-hitam font-bold text-xs sm:text-sm rounded-full hover:bg-hitam hover:text-emas transition-colors flex items-center gap-1.5 disabled:opacity-50"
           >
-            {loading ? '...' : <><Search size={14} className="sm:w-[18px] sm:h-[18px]" /> CARI</>}
+            {loading ? '...' : <><Search size={14} className="sm:w-[18px] sm:h-[18px]" /> {t('track_btn')}</>}
           </button>
         </form>
         {error && (
@@ -170,13 +184,13 @@ export default function TrackOrder() {
           {/* Header */}
           <div className="bg-gray-50 p-6 md:p-8 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
-              <p className="text-sm text-gray-500 mb-1 font-medium">KODE PESANAN</p>
+              <p className="text-sm text-gray-500 mb-1 font-medium">{t('order_code')}</p>
               <h2 className="text-2xl font-mono font-bold text-hitam tracking-wider">{order.tracking_code}</h2>
             </div>
             <div className="text-left md:text-right">
-              <p className="text-sm text-gray-500 mb-1 font-medium">TANGGAL PEMESANAN</p>
+              <p className="text-sm text-gray-500 mb-1 font-medium">{t('order_date')}</p>
               <p className="text-hitam font-medium">
-                {new Date(order.created_at).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                {new Date(order.created_at).toLocaleDateString(language === 'EN' ? 'en-US' : 'id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
               </p>
             </div>
           </div>
@@ -186,7 +200,7 @@ export default function TrackOrder() {
               
               {/* Left Column: Status & Info */}
               <div>
-                <h3 className="font-playfair font-bold text-lg text-hitam mb-6">Status Pesanan</h3>
+                <h3 className="font-playfair font-bold text-lg text-hitam mb-6">{t('order_status')}</h3>
                 
                 <div className={`p-6 rounded-2xl border border-gray-100 flex items-center gap-6 mb-8 ${getStatusDisplay(order.status).bg}`}>
                   <div className={getStatusDisplay(order.status).color}>
@@ -197,11 +211,11 @@ export default function TrackOrder() {
                       {getStatusDisplay(order.status).label}
                     </h4>
                     <p className="text-sm text-gray-600 mt-1">
-                      {order.status === 'pending' && 'Pesanan sedang menunggu konfirmasi admin.'}
-                      {order.status === 'processing' && 'Tim kami sedang memproses pesanan Anda.'}
-                      {order.status === 'shipped' && 'Pesanan Anda sedang dalam perjalanan ke alamat tujuan.'}
-                      {order.status === 'delivered' && 'Pesanan telah diterima. Terima kasih!'}
-                      {order.status === 'cancelled' && 'Pesanan dibatalkan oleh admin.'}
+                      {order.status === 'pending' && t('desc_pending')}
+                      {order.status === 'processing' && t('desc_processing')}
+                      {order.status === 'shipped' && t('desc_shipped')}
+                      {order.status === 'delivered' && t('desc_delivered')}
+                      {order.status === 'cancelled' && t('desc_cancelled')}
                     </p>
                   </div>
                 </div>
@@ -213,14 +227,14 @@ export default function TrackOrder() {
                   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.662c1.746.953 3.71 1.458 5.704 1.459h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413" />
                   </svg>
-                  Tanyakan Pesanan via WhatsApp
+                  {t('inquire_wa_order')}
                 </button>
 
                 {order.status === 'shipped' && (
                   <div className="bg-emas/10 border border-emas/20 p-5 rounded-2xl mb-8 flex flex-col sm:flex-row items-center justify-between gap-4 animate-slide-up">
                     <div className="text-center sm:text-left">
-                      <h4 className="text-sm font-bold text-hitam mb-1">Sudah Menerima Produk?</h4>
-                      <p className="text-xs text-gray-500">Konfirmasi penerimaan barang untuk menyelesaikan pesanan Anda.</p>
+                      <h4 className="text-sm font-bold text-hitam mb-1">{t('already_received')}</h4>
+                      <p className="text-xs text-gray-500">{t('already_received_desc')}</p>
                     </div>
                     <button
                       onClick={handleConfirmReceived}
@@ -232,7 +246,7 @@ export default function TrackOrder() {
                       ) : (
                         <CheckCircle size={14} />
                       )}
-                      Pesanan Diterima
+                      {t('confirm_received_btn')}
                     </button>
                   </div>
                 )}
@@ -240,15 +254,15 @@ export default function TrackOrder() {
                 {order.status === 'cancelled' && (
                   <div className="bg-red-50 p-6 rounded-2xl border border-red-100 mb-8">
                     <h4 className="text-red-700 font-bold mb-2 flex items-center gap-2">
-                      <AlertCircle size={18} /> Alasan Pembatalan:
+                      <AlertCircle size={18} /> {t('cancel_reason')}
                     </h4>
                     <p className="text-red-600/90 text-sm mb-4">
-                      {order.cancel_reason || 'Tidak ada alasan yang diberikan.'}
+                      {order.cancel_reason || t('no_reason')}
                     </p>
                     <div className="bg-white p-4 rounded-xl border border-red-100">
-                      <p className="text-sm text-gray-700 font-medium">Instruksi Pengembalian Dana (Refund)</p>
+                      <p className="text-sm text-gray-700 font-medium">{t('refund_instructions')}</p>
                       <p className="text-xs text-gray-500 mt-1">
-                        Silakan hubungi admin kami via WhatsApp dan berikan rincian Bank/Rekening Anda untuk proses pengembalian dana secepatnya.
+                        {t('refund_desc')}
                       </p>
                     </div>
                   </div>
@@ -261,21 +275,21 @@ export default function TrackOrder() {
                     
                     <div className="relative z-10 w-full">
                       <p className="text-sm font-bold text-purple-600 uppercase tracking-wider mb-1">
-                        Dikirim via {order.courier || 'Kurir Ekspedisi'}
+                        {t('shipped_via')} {order.courier || t('expedition_courier')}
                       </p>
                       
                       <div className="bg-white px-6 py-4 rounded-xl shadow-sm border border-purple-100 my-4 inline-flex items-center gap-4">
                         <div className="text-left">
-                          <span className="text-xs text-gray-500 block mb-1">Nomor Resi:</span>
+                          <span className="text-xs text-gray-500 block mb-1">{t('tracking_number_label')}</span>
                           <span className="text-2xl font-mono font-bold text-hitam tracking-wider select-all">{order.tracking_number}</span>
                         </div>
                         <button 
                           onClick={() => {
                             navigator.clipboard.writeText(order.tracking_number);
-                            alert('Resi berhasil disalin!');
+                            alert(t('copied_alert'));
                           }}
                           className="bg-purple-100 text-purple-600 p-2 rounded-lg hover:bg-purple-200 transition-colors"
-                          title="Salin Resi"
+                          title={t('copy_resi')}
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                         </button>
@@ -287,7 +301,7 @@ export default function TrackOrder() {
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-2 bg-purple-600 text-white px-6 py-2.5 rounded-full font-medium hover:bg-purple-700 transition-colors shadow-sm"
                       >
-                        Lacak Paket di CekResi <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                        {t('track_resi_cekresi')} <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
                       </a>
                     </div>
                   </div>
@@ -295,11 +309,11 @@ export default function TrackOrder() {
 
                 <div className="space-y-6">
                   <div>
-                    <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">Penerima</h4>
+                    <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">{t('recipient')}</h4>
                     <p className="text-hitam font-medium">{getRecipientName()}</p>
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">Alamat Pengiriman</h4>
+                    <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">{t('shipping_address_label')}</h4>
                     <p className="text-gray-700 leading-relaxed whitespace-pre-line">{order.shipping_address}</p>
                   </div>
                 </div>
@@ -307,7 +321,7 @@ export default function TrackOrder() {
 
               {/* Right Column: Items */}
               <div>
-                <h3 className="font-playfair font-bold text-lg text-hitam mb-6">Rincian Produk</h3>
+                <h3 className="font-playfair font-bold text-lg text-hitam mb-6">{t('product_details')}</h3>
                 
                 <div className="space-y-4 mb-6">
                   {order.items && order.items.map((item, idx) => (
@@ -322,8 +336,8 @@ export default function TrackOrder() {
                       <div className="flex-1">
                         <h4 className="font-medium text-hitam text-sm mb-1">{item.product_name}</h4>
                         <div className="flex justify-between items-end">
-                          <p className="text-sm text-gray-500">{item.quantity} x Rp {item.unit_price.toLocaleString('id-ID')}</p>
-                          <p className="font-bold text-hitam">Rp {(item.quantity * item.unit_price).toLocaleString('id-ID')}</p>
+                          <p className="text-sm text-gray-500">{item.quantity} x {formatPrice(item.unit_price, currency, rates)}</p>
+                          <p className="font-bold text-hitam">{formatPrice(item.quantity * item.unit_price, currency, rates)}</p>
                         </div>
                       </div>
                     </div>
@@ -332,19 +346,19 @@ export default function TrackOrder() {
 
                  <div className="bg-gray-50 p-6 rounded-xl border border-gray-100">
                    <div className="flex justify-between items-center mb-2 text-sm text-gray-600">
-                     <span>Subtotal</span>
-                     <span>Rp {(order.total_amount - (order.shipping_cost || 0)).toLocaleString('id-ID')}</span>
+                     <span>{t('subtotal')}</span>
+                     <span>{formatPrice(order.total_amount - (order.shipping_cost || 0), currency, rates)}</span>
                    </div>
                    <div className="flex justify-between items-center mb-4 text-sm text-gray-600">
-                     <span>Ongkos Kirim</span>
+                     <span>{t('shipping_cost')}</span>
                      <span className={Number(order.shipping_cost) > 0 ? 'text-gray-700 font-semibold' : 'text-green-600 font-semibold'}>
-                       {Number(order.shipping_cost) > 0 ? `Rp ${Number(order.shipping_cost).toLocaleString('id-ID')}` : 'Gratis'}
+                       {Number(order.shipping_cost) > 0 ? formatPrice(order.shipping_cost, currency, rates) : t('free')}
                      </span>
                    </div>
                    <div className="w-full h-px bg-gray-200 mb-4"></div>
                    <div className="flex justify-between items-center">
-                     <span className="font-bold text-hitam">Total Pembayaran</span>
-                     <span className="text-2xl font-bold text-emas">Rp {order.total_amount.toLocaleString('id-ID')}</span>
+                     <span className="font-bold text-hitam">{t('total_payment')}</span>
+                     <span className="text-2xl font-bold text-emas">{formatPrice(order.total_amount, currency, rates)}</span>
                    </div>
                  </div>
               </div>

@@ -2,8 +2,13 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { ChevronLeft, SlidersHorizontal, X } from 'lucide-react';
+import useCurrencyStore from '../store/useCurrencyStore';
+import { formatPrice } from '../utils/currencyHelper';
+import { useTranslation } from '../utils/translations';
 
 export default function Products() {
+  const { currency, rates } = useCurrencyStore();
+  const { t } = useTranslation();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -132,8 +137,8 @@ export default function Products() {
   };
 
   const SORT_OPTIONS = [
-    { key: 'terkait', label: 'Terkait' },
-    { key: 'terlaris', label: 'Terlaris' },
+    { key: 'terkait', label: t('relevant') },
+    { key: 'terlaris', label: t('best_seller') },
   ];
 
   return (
@@ -143,14 +148,14 @@ export default function Products() {
       <div className="flex items-center justify-between md:hidden mb-1">
         <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-gray-500 hover:text-emas transition-colors group">
           <ChevronLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-          Kembali
+          {t('back')}
         </button>
         <button
           onClick={() => setFilterOpen(!filterOpen)}
           className="flex items-center gap-2 text-sm font-bold text-gray-600 bg-white border border-gray-200 px-4 py-2 rounded-xl shadow-sm hover:border-emas hover:text-emas transition-all"
         >
           <SlidersHorizontal size={15} />
-          Filter
+          {t('filter')}
           {categoryFilter && <span className="w-2 h-2 rounded-full bg-emas inline-block"></span>}
         </button>
       </div>
@@ -159,7 +164,7 @@ export default function Products() {
       {filterOpen && (
         <div className="md:hidden bg-white rounded-2xl shadow-soft border border-gray-100 p-5 mb-2">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-hitam uppercase tracking-widest">Filter Kategori</h3>
+            <h3 className="text-sm font-bold text-hitam uppercase tracking-widest">{t('category_filter')}</h3>
             <button onClick={() => setFilterOpen(false)} className="text-gray-400 hover:text-hitam"><X size={18} /></button>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -167,7 +172,7 @@ export default function Products() {
               onClick={() => { updateParams({ category: '' }); setFilterOpen(false); }}
               className={`px-4 py-2 rounded-xl text-sm transition-all duration-300 ${!categoryFilter ? 'bg-orange-50/80 text-emas font-bold border border-emas/20' : 'bg-gray-50 text-gray-600 border border-gray-100 font-medium'}`}
             >
-              Semua
+              {t('all')}
             </button>
             {categories.map(cat => (
               <button
@@ -189,14 +194,14 @@ export default function Products() {
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
             </svg>
-            Filter Kategori
+            {t('category_filter')}
           </h3>
           <div className="flex flex-col gap-1.5 text-sm">
             <button
               onClick={() => updateParams({ category: '' })}
               className={`text-left px-4 py-2.5 rounded-xl transition-all duration-300 ${!categoryFilter ? 'bg-orange-50/80 text-emas font-bold shadow-sm border border-emas/20' : 'text-gray-600 hover:bg-gray-50 hover:text-hitam-gelap font-medium'}`}
             >
-              Semua Produk
+              {t('all_products')}
             </button>
             {categories.map(cat => (
               <button
@@ -218,14 +223,14 @@ export default function Products() {
         {searchQuery && (
           <div className="mb-4 flex items-center gap-2 flex-wrap">
             <span className="text-sm text-gray-600">
-              Hasil pencarian: <span className="font-bold text-zinc-800">"{searchQuery}"</span>
-              {' '}— <span className="text-emas font-bold">{filteredProducts.length} produk ditemukan</span>
+              {t('search_results')} <span className="font-bold text-zinc-800">"{searchQuery}"</span>
+              {' '}— <span className="text-emas font-bold">{filteredProducts.length} {t('products_found')}</span>
             </span>
             <button
               onClick={() => updateParams({ search: '' })}
               className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-500 bg-gray-100 hover:bg-red-50 px-2 py-1 rounded-full transition-all"
             >
-              <X size={12} /> Hapus
+              <X size={12} /> {t('clear')}
             </button>
           </div>
         )}
@@ -233,7 +238,7 @@ export default function Products() {
         {/* Sort Header */}
         <div className="bg-white p-4 mb-8 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between text-sm overflow-x-auto hide-scrollbar">
           <div className="flex items-center gap-3 min-w-max">
-            <span className="text-gray-500 mr-2 font-medium">Urutkan:</span>
+            <span className="text-gray-500 mr-2 font-medium">{t('sort_by')}</span>
             {SORT_OPTIONS.map(opt => (
               <button
                 key={opt.key}
@@ -249,7 +254,7 @@ export default function Products() {
             ))}
           </div>
           <span className="text-gray-400 text-xs ml-4 shrink-0">
-            {filteredProducts.length} produk
+            {filteredProducts.length} {t('products_count')}
           </span>
         </div>
 
@@ -276,12 +281,12 @@ export default function Products() {
                     )}
                     {product.promo_type === 'flash_sale' && (
                       <div className="absolute top-2 left-2 bg-red-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded shadow-sm z-10 tracking-wider">
-                        ⚡ Flash Sale
+                        ⚡ {t('flash_sale')}
                       </div>
                     )}
                     {product.promo_type === 'custom_promo' && (
                       <div className="absolute top-2 left-2 bg-emerald-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded shadow-sm z-10 tracking-wider">
-                        ✨ Promo
+                        ✨ {t('promo')}
                       </div>
                     )}
                     {product.discount_percent > 0 && (
@@ -304,20 +309,20 @@ export default function Products() {
                               {product.discount_percent}%
                             </span>
                             <span className="text-xs text-zinc-400 line-through">
-                              Rp {Number(product.original_price).toLocaleString('id-ID')}
+                              {formatPrice(product.original_price, currency, rates)}
                             </span>
                           </div>
                           <div className="text-hitam-gelap font-bold text-base leading-none">
-                            Rp {Number(product.price).toLocaleString('id-ID')}
+                            {formatPrice(product.price, currency, rates)}
                           </div>
                         </div>
                       ) : (
                         <div className="text-hitam-gelap font-bold text-lg leading-none mb-3">
-                          Rp {product.price ? Number(product.price).toLocaleString('id-ID') : '-'}
+                          {product.price ? formatPrice(product.price, currency, rates) : '-'}
                         </div>
                       )}
-                      <div className="flex items-center justify-end text-[11px] text-zinc-500">
-                        <div>Terjual {soldCount}</div>
+                      <div className="flex items-center justify-between text-[11px] text-zinc-500">
+                        <div>{t('sold')} {soldCount}</div>
                       </div>
                     </div>
                   </div>
@@ -327,8 +332,8 @@ export default function Products() {
             {filteredProducts.length === 0 && (
               <div className="col-span-full py-20 text-center text-gray-400 bg-white rounded-2xl">
                 {searchQuery
-                  ? `Produk "${searchQuery}" tidak ditemukan.`
-                  : 'Produk tidak ditemukan.'
+                  ? t('no_search_results', { query: searchQuery })
+                  : t('no_products_found')
                 }
               </div>
             )}

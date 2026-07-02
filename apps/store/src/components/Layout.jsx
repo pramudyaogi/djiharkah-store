@@ -3,6 +3,7 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import Navbar from './Navbar';
 import { Mail, Phone, Instagram, MessageCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useTranslation } from '../utils/translations';
 
 const TiktokIcon = ({ size = 16, className = "" }) => (
   <svg
@@ -22,6 +23,7 @@ const TiktokIcon = ({ size = 16, className = "" }) => (
 );
 
 export default function Layout() {
+  const { t, language } = useTranslation();
   const location = useLocation();
   const currentPath = location.pathname;
 
@@ -88,13 +90,13 @@ export default function Layout() {
             <div className="pr-4">
               <h3 className="text-white font-bold mb-6 text-xl font-playfair uppercase tracking-widest">{storeSettings.store_name}</h3>
               <p className="leading-relaxed mb-4 text-zinc-400">
-                {storeSettings.description}
+                {language === 'EN' ? (storeSettings.description_en || storeSettings.description) : storeSettings.description}
               </p>
             </div>
             
             {/* Kolom 2: Kontak (Hubungi Kami) */}
             <div>
-              <h3 className="text-white font-bold mb-6 text-sm uppercase tracking-widest">Hubungi Kami</h3>
+              <h3 className="text-white font-bold mb-6 text-sm uppercase tracking-widest">{t('contact_us')}</h3>
               <ul className="space-y-4">
                 <li className="flex items-start gap-3 hover:text-emas transition-colors duration-300 group">
                   <div className="mt-0.5 p-1.5 rounded-full bg-zinc-800 group-hover:bg-emas/20 transition-colors">
@@ -120,7 +122,7 @@ export default function Layout() {
             
             {/* Kolom 3: Sosial Media */}
             <div>
-              <h3 className="text-white font-bold mb-6 text-sm uppercase tracking-widest">Sosial Media</h3>
+              <h3 className="text-white font-bold mb-6 text-sm uppercase tracking-widest">{t('social_media')}</h3>
               <ul className="space-y-4">
                 <li>
                   <a
@@ -154,10 +156,10 @@ export default function Layout() {
           </div>
           
           <div className="pt-8 border-t border-zinc-800/50 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-zinc-500">
-            <p>&copy; {new Date().getFullYear()} {storeSettings.store_name}. Hak Cipta Dilindungi Undang-Undang.</p>
+            <p>&copy; {new Date().getFullYear()} {storeSettings.store_name}. {t('all_rights_reserved')}</p>
             <div className="flex gap-4">
-              <Link to="/privacy" className="hover:text-zinc-300 transition-colors">Kebijakan Privasi</Link>
-              <Link to="/terms" className="hover:text-zinc-300 transition-colors">Syarat & Ketentuan</Link>
+              <Link to="/privacy" className="hover:text-zinc-300 transition-colors">{t('privacy_policy')}</Link>
+              <Link to="/terms" className="hover:text-zinc-300 transition-colors">{t('terms_conditions')}</Link>
             </div>
           </div>
         </div>
@@ -169,18 +171,18 @@ export default function Layout() {
           {/* Speech Bubble */}
           <div className="flex items-center animate-float-gentle">
             <div className="bg-white text-zinc-800 text-[10px] sm:text-xs font-semibold px-3 py-2 sm:px-4 sm:py-2.5 rounded-2xl shadow-[0_4px_15px_rgba(0,0,0,0.08)] border border-zinc-100 relative whitespace-nowrap">
-              Tanyakan apapun via WhatsApp
+              {t('whatsapp_float_tooltip')}
               {/* Arrow pointer */}
               <div className="w-2.5 h-2.5 bg-white border-t border-r border-zinc-100 rotate-45 absolute right-[-5px] top-1/2 -translate-y-1/2"></div>
             </div>
           </div>
 
           <a
-            href={`https://wa.me/${cleanPhoneForWhatsApp(storeSettings.phone)}?text=${encodeURIComponent("Assalamualaikum Djiharkah Store.")}`}
+            href={`https://wa.me/${cleanPhoneForWhatsApp(storeSettings.phone)}?text=${encodeURIComponent(t('wa_general_greeting'))}`}
             target="_blank"
             rel="noopener noreferrer"
             className="bg-white hover:bg-zinc-50 text-zinc-800 p-3.5 rounded-full shadow-[0_4px_15px_rgba(0,0,0,0.08)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.12)] border border-zinc-200/80 hover:-translate-y-1 active:scale-95 transition-all duration-300 flex items-center justify-center group relative"
-            title="Hubungi Kami via WhatsApp"
+            title={t('whatsapp_contact_title')}
           >
             {/* Custom SVG Icon for WhatsApp */}
             <svg
@@ -194,7 +196,7 @@ export default function Layout() {
             
             {/* Tooltip on hover */}
             <span className="absolute right-16 scale-0 group-hover:scale-100 transition-all duration-200 bg-black text-white text-xs font-semibold px-3 py-2 rounded-lg shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-90 pointer-events-none">
-              Hubungi WhatsApp
+              {t('whatsapp_contact')}
             </span>
           </a>
         </div>

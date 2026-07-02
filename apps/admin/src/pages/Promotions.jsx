@@ -3,6 +3,64 @@ import { supabase } from '../lib/supabase';
 import { Percent, Clock, Tag, Sparkles, Save, Search, RefreshCw, GripVertical, X, Check, Edit2 } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
 
+const translatePhrase = (phrase) => {
+  const dictionary = {
+    'spesial': 'Special',
+    'ramadhan': 'Ramadhan',
+    'ramadan': 'Ramadhan',
+    'terbatas': 'Limited',
+    'tahun baru': 'New Year',
+    'natal': 'Christmas',
+    'lebaran': 'Eid',
+    'diskon': 'Discount',
+    'cuci gudang': 'Clearance',
+    'kilat': 'Flash',
+    'akhir tahun': 'Year-End',
+    'awal tahun': 'New Year',
+    'klasik': 'Classic',
+    'mewah': 'Luxury'
+  };
+
+  const cleanPhrase = phrase.trim();
+  if (dictionary[cleanPhrase]) {
+    return dictionary[cleanPhrase];
+  }
+
+  // Split by space and translate word by word
+  return cleanPhrase.split(/\s+/).map(word => {
+    // Remove punctuation for lookup
+    const cleanWord = word.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").toLowerCase();
+    if (dictionary[cleanWord]) {
+      // Restore punctuation if there was any
+      const suffix = word.slice(cleanWord.length);
+      return dictionary[cleanWord] + suffix;
+    }
+    // Capitalize word
+    return word.charAt(0).toUpperCase() + word.slice(1);
+  }).join(' ');
+};
+
+const autoTranslatePromoName = (val) => {
+  if (!val) return '';
+  let clean = val.toLowerCase().trim();
+  
+  // Handle "promo <something>" pattern
+  if (clean.startsWith('promo ')) {
+    let rest = val.substring(6).trim();
+    let translatedRest = translatePhrase(rest);
+    return `${translatedRest} Promo`;
+  }
+  
+  // Handle "<something> promo" pattern
+  if (clean.endsWith(' promo')) {
+    let rest = val.substring(0, val.length - 6).trim();
+    let translatedRest = translatePhrase(rest);
+    return `${translatedRest} Promo`;
+  }
+
+  return translatePhrase(val);
+};
+
 export default function Promotions() {
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState('flash_sale'); // 'flash_sale', 'custom_promo', 'exclusive'
@@ -176,6 +234,7 @@ export default function Promotions() {
         .from('promotions')
         .update({
           name: promo.name,
+          name_en: promo.name_en,
           is_active: promo.is_active,
           discount_percent: parseInt(promo.discount_percent || 0),
           use_default_discount: promo.use_default_discount,
@@ -230,7 +289,9 @@ export default function Promotions() {
         .from('promotions')
         .update({
           name: promo.name,
+          name_en: promo.name_en,
           description: promo.description,
+          description_en: promo.description_en,
           is_active: promo.is_active,
           discount_percent: parseInt(promo.discount_percent || 0),
           use_default_discount: promo.use_default_discount
@@ -768,13 +829,41 @@ export default function Promotions() {
                   type="text"
                   required
                   value={promotions.flash_sale.name}
-                  onChange={(e) => setPromotions(prev => ({
-                    ...prev,
-                    flash_sale: { ...prev.flash_sale, name: e.target.value }
-                  }))}
+                  onChange={(e) => {
+                    const newName = e.target.value;
+                    setPromotions(prev => {
+                      const currentNameEn = prev.flash_sale.name_en;
+                      const oldAutoTranslated = autoTranslatePromoName(prev.flash_sale.name);
+                      const shouldAutoUpdate = !currentNameEn || currentNameEn === oldAutoTranslated;
+                      return {
+                        ...prev,
+                        flash_sale: {
+                          ...prev.flash_sale,
+                          name: newName,
+                          name_en: shouldAutoUpdate ? autoTranslatePromoName(newName) : currentNameEn
+                        }
+                      };
+                    });
+                  }}
                   onBlur={() => saveFlashSaleData(promotions.flash_sale, selectedFlashSaleProducts)}
                   className="w-full text-gray-900 dark:text-zinc-100 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-yellow-500"
                   placeholder="Misal: Flash Sale Terbatas!"
+                />
+              </div>
+
+              {/* Title EN */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-zinc-500">Judul Flash Sale (English)</label>
+                <input
+                  type="text"
+                  value={promotions.flash_sale.name_en || ''}
+                  onChange={(e) => setPromotions(prev => ({
+                    ...prev,
+                    flash_sale: { ...prev.flash_sale, name_en: e.target.value }
+                  }))}
+                  onBlur={() => saveFlashSaleData(promotions.flash_sale, selectedFlashSaleProducts)}
+                  className="w-full text-gray-900 dark:text-zinc-100 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-yellow-500"
+                  placeholder="Example: Limited Flash Sale!"
                 />
               </div>
 
@@ -1033,13 +1122,41 @@ export default function Promotions() {
                   type="text"
                   required
                   value={promotions.custom_promo.name}
-                  onChange={(e) => setPromotions(prev => ({
-                    ...prev,
-                    custom_promo: { ...prev.custom_promo, name: e.target.value }
-                  }))}
+                  onChange={(e) => {
+                    const newName = e.target.value;
+                    setPromotions(prev => {
+                      const currentNameEn = prev.custom_promo.name_en;
+                      const oldAutoTranslated = autoTranslatePromoName(prev.custom_promo.name);
+                      const shouldAutoUpdate = !currentNameEn || currentNameEn === oldAutoTranslated;
+                      return {
+                        ...prev,
+                        custom_promo: {
+                          ...prev.custom_promo,
+                          name: newName,
+                          name_en: shouldAutoUpdate ? autoTranslatePromoName(newName) : currentNameEn
+                        }
+                      };
+                    });
+                  }}
                   onBlur={() => saveCustomPromoData(promotions.custom_promo, selectedCustomPromoProducts)}
                   className="w-full text-gray-900 dark:text-zinc-100 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-yellow-500"
                   placeholder="Misal: Promo Spesial Ramadhan"
+                />
+              </div>
+
+              {/* Title EN */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-zinc-500">Nama Promo (English)</label>
+                <input
+                  type="text"
+                  value={promotions.custom_promo.name_en || ''}
+                  onChange={(e) => setPromotions(prev => ({
+                    ...prev,
+                    custom_promo: { ...prev.custom_promo, name_en: e.target.value }
+                  }))}
+                  onBlur={() => saveCustomPromoData(promotions.custom_promo, selectedCustomPromoProducts)}
+                  className="w-full text-gray-900 dark:text-zinc-100 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-yellow-500"
+                  placeholder="Example: Ramadhan Special Promo"
                 />
               </div>
 
@@ -1109,6 +1226,22 @@ export default function Promotions() {
                   onBlur={() => saveCustomPromoData(promotions.custom_promo, selectedCustomPromoProducts)}
                   className="w-full text-gray-900 dark:text-zinc-100 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-yellow-500 resize-none"
                   placeholder="Tuliskan info promo menarik..."
+                />
+              </div>
+
+              {/* Description EN */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-zinc-500">Deskripsi Promo (English)</label>
+                <textarea
+                  rows={4}
+                  value={promotions.custom_promo.description_en || ''}
+                  onChange={(e) => setPromotions(prev => ({
+                    ...prev,
+                    custom_promo: { ...prev.custom_promo, description_en: e.target.value }
+                  }))}
+                  onBlur={() => saveCustomPromoData(promotions.custom_promo, selectedCustomPromoProducts)}
+                  className="w-full text-gray-900 dark:text-zinc-100 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-yellow-500 resize-none"
+                  placeholder="Write interesting promo details..."
                 />
               </div>
             </div>

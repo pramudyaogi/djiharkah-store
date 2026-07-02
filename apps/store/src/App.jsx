@@ -46,7 +46,15 @@ function AppRoutes() {
   );
 }
 
+import useCurrencyStore from './store/useCurrencyStore';
+
 export default function App() {
+  const fetchRates = useCurrencyStore((state) => state.fetchRates);
+
+  useEffect(() => {
+    fetchRates();
+  }, [fetchRates]);
+
   return (
     <BrowserRouter>
       <ScrollToTop />

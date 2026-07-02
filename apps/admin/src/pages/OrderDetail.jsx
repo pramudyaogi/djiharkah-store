@@ -88,10 +88,19 @@ export default function OrderDetail() {
   // Parse guest contact info from shipping_address if order.profiles is empty
   const getCustomerInfo = () => {
     if (order.profiles) {
+      const fullAddress = order.shipping_address || 'Tidak ada alamat pengiriman';
+      let cleanAddress = fullAddress;
+      let notes = '';
+      if (fullAddress.includes('\n\nCatatan: ')) {
+        const idx = fullAddress.indexOf('\n\nCatatan: ');
+        cleanAddress = fullAddress.substring(0, idx);
+        notes = fullAddress.substring(idx + 11);
+      }
       return {
         name: order.profiles.full_name || 'Pelanggan',
         phone: order.contact_phone || '-',
-        address: order.shipping_address || 'Tidak ada alamat pengiriman'
+        address: cleanAddress,
+        notes: notes
       };
     }
     
@@ -102,10 +111,18 @@ export default function OrderDetail() {
       const address = parts.slice(1).join('\n') || '';
       const infoParts = firstLine.split(' - ');
       if (infoParts.length >= 2) {
+        let cleanAddress = address;
+        let notes = '';
+        if (address.includes('\n\nCatatan: ')) {
+          const idx = address.indexOf('\n\nCatatan: ');
+          cleanAddress = address.substring(0, idx);
+          notes = address.substring(idx + 11);
+        }
         return {
           name: infoParts[0],
           phone: infoParts[1],
-          address: address
+          address: cleanAddress,
+          notes: notes
         };
       }
     }
@@ -113,7 +130,8 @@ export default function OrderDetail() {
     return {
       name: 'Guest User',
       phone: order.contact_phone || '-',
-      address: order.shipping_address || 'Tidak ada alamat pengiriman'
+      address: order.shipping_address || 'Tidak ada alamat pengiriman',
+      notes: ''
     };
   };
 
@@ -207,7 +225,10 @@ export default function OrderDetail() {
                   
                   <div className="flex-1 min-w-0">
                     <h4 className="text-gray-800 dark:text-zinc-200 font-medium truncate">{item.products?.name || 'Produk Dihapus'}</h4>
-                    <div className="text-xs text-gray-400 dark:text-zinc-500 mt-1">Rp {Number(item.unit_price).toLocaleString('id-ID')} x {item.quantity}</div>
+                    <div className="text-xs text-gray-400 dark:text-zinc-500 mt-1">
+                      Rp {Number(item.unit_price).toLocaleString('id-ID')} x{' '}
+                      <span className="font-extrabold text-sm text-yellow-500 ml-0.5">{item.quantity}</span>
+                    </div>
                   </div>
                   
                   <div className="text-right shrink-0">
@@ -398,6 +419,17 @@ export default function OrderDetail() {
                   {customerInfo.address}
                 </p>
               </div>
+
+              {customerInfo.notes && (
+                <div className="mt-4 p-3.5 bg-yellow-500/10 dark:bg-yellow-500/5 border border-yellow-500/20 dark:border-yellow-500/10 rounded-xl">
+                  <p className="text-xs font-bold text-yellow-600 dark:text-yellow-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <span>📝</span> Catatan Pesanan
+                  </p>
+                  <p className="text-gray-700 dark:text-zinc-300 leading-relaxed text-sm font-medium whitespace-pre-line">
+                    {customerInfo.notes}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
           

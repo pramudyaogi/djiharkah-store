@@ -2,7 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Package, ShieldCheck, Truck, Clock, Store, Star, MessageSquare, CornerDownRight, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import useCurrencyStore from '../store/useCurrencyStore';
+import { formatPrice } from '../utils/currencyHelper';
+import { useTranslation } from '../utils/translations';
+
 export default function Home() {
+  const { currency, rates } = useCurrencyStore();
+  const { t, language } = useTranslation();
   const [categories, setCategories] = useState([]);
   const [featuredProducts, setFeaturedProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -141,29 +147,31 @@ export default function Home() {
             })
         );
 
-        const [fsProds, cpProds, exclProds] = await Promise.all(promises);
+        const [fsProds, cpProds, featProds] = await Promise.all(promises);
         setFlashSaleProducts(fsProds);
         setCustomPromoProducts(cpProds);
-        setFeaturedProducts(exclProds);
+        setFeaturedProducts(featProds);
 
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        setFetchError(error.message || JSON.stringify(error));
+      } catch (err) {
+        console.error(err);
+        setFetchError(err.message || 'Gagal mengambil data dari database.');
       } finally {
         setLoading(false);
       }
     }
+
     fetchData();
   }, []);
 
-  // Countdown timer for Flash Sale
+  // Flash Sale Timer Effect
   useEffect(() => {
     if (!flashSale || !flashSale.ends_at) return;
 
-    const calculateTimeLeft = () => {
-      const difference = +new Date(flashSale.ends_at) - +new Date();
+    const timer = setInterval(() => {
+      const difference = new Date(flashSale.ends_at) - new Date();
       if (difference <= 0) {
-        setTimeLeft('00:00:00');
+        clearInterval(timer);
+        setTimeLeft('SELESAI');
         return;
       }
 
@@ -171,29 +179,27 @@ export default function Home() {
       const minutes = Math.floor((difference / 1000 / 60) % 60);
       const seconds = Math.floor((difference / 1000) % 60);
 
-      const pad = (num) => String(num).padStart(2, '0');
-      setTimeLeft(`${pad(hours)}:${pad(minutes)}:${pad(seconds)}`);
-    };
-
-    calculateTimeLeft();
-    const timer = setInterval(calculateTimeLeft, 1000);
+      setTimeLeft(
+        `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+      );
+    }, 1000);
 
     return () => clearInterval(timer);
   }, [flashSale]);
 
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
-    if (!reviewForm.guest_name.trim() || !reviewForm.guest_phone.trim()) {
-      setReviewMessage('Nama dan Nomor Telepon wajib diisi.');
+    if (!reviewForm.guest_name || !reviewForm.guest_phone) {
+      setReviewMessage(t('name_phone_required'));
       return;
     }
     if (!reviewForm.comment.trim()) {
-      setReviewMessage('Komentar tidak boleh kosong.');
+      setReviewMessage(t('comment_required'));
       return;
     }
 
+    setIsSubmittingReview(true);
     try {
-      setIsSubmittingReview(true);
       setReviewMessage('');
 
       const reviewData = {
@@ -213,13 +219,13 @@ export default function Home() {
 
       setReviews([data, ...reviews]);
       setReviewForm({ rating: 5, comment: '', guest_name: '', guest_phone: '' });
-      setReviewMessage('Terima kasih atas ulasan Anda!');
+      setReviewMessage(t('review_success'));
       setTimeout(() => {
         setIsReviewModalOpen(false);
         setReviewMessage('');
       }, 1500);
     } catch (err) {
-      setReviewMessage(err.message || 'Gagal mengirim ulasan.');
+      setReviewMessage(err.message || t('review_failed'));
     } finally {
       setIsSubmittingReview(false);
     }
@@ -258,13 +264,13 @@ export default function Home() {
             
             <div className="relative z-10 max-w-xl">
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-playfair font-bold text-white mb-4 sm:mb-6 leading-tight drop-shadow-md">
-                Kemewahan <br/><span className="text-emas">dalam Ibadah</span>
+                {t('hero_title')}
               </h1>
               <p className="text-gray-300 text-xs sm:text-sm md:text-base lg:text-lg mb-6 sm:mb-8 md:mb-10 leading-relaxed font-light drop-shadow-md">
-                Temukan koleksi sarung eksklusif dari merek-merek ternama. Kualitas premium untuk kenyamanan maksimal Anda dalam beribadah.
+                {t('hero_subtitle')}
               </p>
               <Link to="/products" className="inline-flex items-center gap-2 bg-emas text-black px-6 sm:px-8 py-3 sm:py-3.5 rounded-full text-xs sm:text-sm font-bold hover:bg-yellow-400 hover:shadow-[0_0_20px_rgba(234,179,8,0.3)] hover:-translate-y-1 transition-all duration-300 w-fit">
-                Mulai Belanja 
+                {t('start_shopping')}
                 <span className="text-lg">→</span>
               </Link>
             </div>
@@ -290,7 +296,7 @@ export default function Home() {
         {/* Kategori Section (Horizontal Grid) */}
       <div className="bg-white rounded-2xl shadow-soft mb-12 overflow-hidden border border-gray-100">
         <div className="p-5 md:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-          <h2 className="text-lg font-bold text-hitam-gelap tracking-wide">Jelajahi Kategori</h2>
+          <h2 className="text-lg font-bold text-hitam-gelap tracking-wide">{t('explore_categories')}</h2>
         </div>
         <div className="p-6 md:p-8 bg-gray-50/30 flex overflow-x-auto justify-start md:justify-center gap-4 sm:gap-6 md:gap-8 no-scrollbar">
           {categories.slice(0, categories.length > 5 ? 4 : 5).map(category => (
@@ -314,15 +320,15 @@ export default function Home() {
               <div className="w-12 h-12 md:w-16 md:h-16 rounded-2xl bg-white shadow-soft flex items-center justify-center group-hover:bg-emas transition-colors duration-300 text-emas group-hover:text-black">
                 <span className="text-xl md:text-2xl font-bold font-playfair">&rarr;</span>
               </div>
-              <span className="text-xs md:text-sm font-bold text-emas group-hover:text-hitam-gelap transition-colors">Lainnya</span>
+              <span className="text-xs md:text-sm font-bold text-emas group-hover:text-hitam-gelap transition-colors">{t('others')}</span>
             </Link>
           )}
 
           {categories.length === 0 && (
             <div className="w-full py-12 flex flex-col items-center justify-center text-center text-zinc-400">
               <Package size={48} className="mb-4 text-zinc-200" />
-              <p className="text-lg font-medium text-zinc-500">Belum ada kategori</p>
-              <p className="text-sm">Silakan hubungi Admin untuk menambahkan kategori.</p>
+              <p className="text-lg font-medium text-zinc-500">{t('no_categories')}</p>
+              <p className="text-sm">{t('no_categories_desc')}</p>
             </div>
           )}
         </div>
@@ -337,12 +343,14 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4 relative z-10">
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 md:gap-4">
               <span className="bg-red-500 text-white text-xs font-extrabold px-3 py-1 rounded-full animate-pulse uppercase tracking-wider shadow-md">
-                Flash Sale
+                {t('flash_sale')}
               </span>
-              <h2 className="text-xl md:text-2xl font-playfair font-bold text-hitam-gelap">{flashSale.name}</h2>
+              <h2 className="text-xl md:text-2xl font-playfair font-bold text-hitam-gelap">
+                {language === 'EN' ? (flashSale.name_en || flashSale.name) : flashSale.name}
+              </h2>
             </div>
             <div className="flex items-center gap-2 bg-zinc-900 text-white px-4 py-2.5 rounded-2xl shadow-lg border border-zinc-800 self-start sm:self-auto">
-              <span className="text-xs font-semibold text-zinc-400">Berakhir dalam:</span>
+              <span className="text-xs font-semibold text-zinc-400">{t('ends_in')}</span>
               <span className="font-mono text-base md:text-lg font-bold text-emas tracking-wider">{timeLeft}</span>
             </div>
           </div>
@@ -366,7 +374,7 @@ export default function Home() {
                       <div className="absolute inset-0 flex items-center justify-center text-gray-300 text-xs font-bold bg-gray-100">NO IMG</div>
                     )}
                     <div className="absolute top-2 left-2 bg-red-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded shadow-sm z-10 tracking-wider">
-                      ⚡ Flash Sale
+                      ⚡ {t('flash_sale')}
                     </div>
                     <div className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm z-10 animate-bounce">
                       -{finalDiscountPercent}%
@@ -382,15 +390,15 @@ export default function Home() {
                       <div className="space-y-1 mb-2">
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs text-zinc-400 line-through">
-                            Rp {Number(product.original_price || product.price).toLocaleString('id-ID')}
+                            {formatPrice(product.original_price || product.price, currency, rates)}
                           </span>
                         </div>
                         <div className="text-red-600 font-bold text-base leading-none">
-                          Rp {Math.round(discountPrice).toLocaleString('id-ID')}
+                          {formatPrice(discountPrice, currency, rates)}
                         </div>
                       </div>
                       <div className="flex items-center justify-between text-[11px] text-zinc-500">
-                        <div>Terjual {soldCount}</div>
+                        <div>{t('sold')} {soldCount}</div>
                       </div>
                     </div>
                   </div>
@@ -408,10 +416,12 @@ export default function Home() {
           
           <div className="mb-8 relative z-10">
             <h2 className="text-xl md:text-2xl font-playfair font-bold text-hitam-gelap flex items-center gap-2">
-              <span className="text-emerald-600">✨</span> {customPromo.name}
+              <span className="text-emerald-600">✨</span> {language === 'EN' ? (customPromo.name_en || customPromo.name) : customPromo.name}
             </h2>
             {customPromo.description && (
-              <p className="text-zinc-500 text-xs md:text-sm mt-1">{customPromo.description}</p>
+              <p className="text-zinc-500 text-xs md:text-sm mt-1">
+                {language === 'EN' ? (customPromo.description_en || customPromo.description) : customPromo.description}
+              </p>
             )}
           </div>
 
@@ -432,7 +442,7 @@ export default function Home() {
                       <div className="absolute inset-0 flex items-center justify-center text-gray-300 text-xs font-bold bg-gray-100">NO IMG</div>
                     )}
                     <div className="absolute top-2 left-2 bg-emerald-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded shadow-sm z-10 tracking-wider">
-                      ✨ Promo
+                      ✨ {t('promo')}
                     </div>
                     {product.discount_percent > 0 && (
                       <div className="absolute top-2 right-2 bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm z-10">
@@ -447,24 +457,18 @@ export default function Home() {
                     </h3>
                     
                     <div className="mt-auto pt-3 border-t border-gray-50">
-                      {product.discount_percent > 0 && product.original_price ? (
-                        <div className="space-y-1 mb-2">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs text-zinc-400 line-through">
-                              Rp {Number(product.original_price).toLocaleString('id-ID')}
-                            </span>
-                          </div>
-                          <div className="text-hitam-gelap font-bold text-base leading-none">
-                            Rp {Number(product.price).toLocaleString('id-ID')}
-                          </div>
+                      <div className="space-y-1 mb-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-zinc-400 line-through">
+                            {formatPrice(product.original_price || product.price, currency, rates)}
+                          </span>
                         </div>
-                      ) : (
-                        <div className="text-hitam-gelap font-bold text-base leading-none mb-3">
-                          Rp {product.price ? Number(product.price).toLocaleString('id-ID') : '-'}
+                        <div className="text-emerald-600 font-bold text-base leading-none">
+                          {formatPrice(product.price, currency, rates)}
                         </div>
-                      )}
+                      </div>
                       <div className="flex items-center justify-between text-[11px] text-zinc-500">
-                        <div>Terjual {soldCount}</div>
+                        <div>{t('sold')} {soldCount}</div>
                       </div>
                     </div>
                   </div>
@@ -475,75 +479,75 @@ export default function Home() {
         </div>
       )}
 
-      {/* Rekomendasi / Produk Pilihan (Dense Grid 5-6 cols) */}
-      <div className="mb-16 w-full">
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end mb-6 px-2 gap-2 sm:gap-0">
+      {/* Featured Products Grid */}
+      <div className="w-full mb-16">
+        <div className="flex justify-between items-end mb-8">
           <div>
-            <h2 className="text-xl md:text-2xl font-playfair font-bold text-hitam-gelap mb-1">Pilihan Eksklusif</h2>
-            <p className="text-xs md:text-sm text-zinc-500">Koleksi terbaik untuk menyempurnakan ibadah Anda</p>
+            <span className="text-emas font-bold text-xs uppercase tracking-widest">{t('promoSpecials') || t('special_promo')}</span>
+            <h2 className="text-2xl md:text-3xl font-playfair font-bold text-hitam-gelap mt-1">{t('exclusive_choices')}</h2>
+            <p className="text-gray-500 text-xs md:text-sm mt-1">{t('exclusive_desc')}</p>
           </div>
-          <Link to="/products" className="text-xs md:text-sm font-medium text-emas hover:text-yellow-600 transition-colors pb-1 flex items-center gap-1 self-start sm:self-auto">
-            Lihat Semua <span aria-hidden="true">&rarr;</span>
+          <Link to="/products" className="text-sm font-bold text-emas hover:text-hitam transition-colors hover:underline">
+            {t('view_all')} &rarr;
           </Link>
         </div>
-        
+
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
           {featuredProducts.map(product => {
             const soldCount = product.sold_count ?? 0;
+            const originalPrice = product.original_price;
+            const currentPrice = product.price;
+            const discountPercent = product.discount_percent ?? 0;
 
             return (
               <Link 
                 key={product.id} 
                 to={`/products/${product.slug}`}
-                className="bg-white rounded-2xl overflow-hidden border border-gray-100 hover:border-yellow-200 hover:-translate-y-1.5 shadow-sm hover:shadow-soft transition-all duration-300 flex flex-col h-full group"
+                className="bg-white rounded-2xl overflow-hidden border border-gray-100 hover:border-emas/30 hover:-translate-y-1.5 shadow-sm hover:shadow-soft transition-all duration-300 flex flex-col h-full group"
               >
-                {/* Image */}
                 <div className="relative w-full pt-[100%] bg-gray-50 overflow-hidden">
                   {product.image_url ? (
                     <img src={product.image_url} alt={product.name} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   ) : (
                     <div className="absolute inset-0 flex items-center justify-center text-gray-300 text-xs font-bold bg-gray-100">NO IMG</div>
                   )}
-                  {product.stock < 10 && product.stock > 0 && (
-                    <div className="absolute top-2 left-2 bg-red-500/90 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-1 rounded-full z-10 shadow-sm">
-                      Stok Terbatas
+                  {discountPercent > 0 && (
+                    <div className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm z-10 animate-pulse">
+                      -{discountPercent}%
                     </div>
                   )}
-                  {product.discount_percent > 0 && (
-                    <div className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm z-10">
-                      -{product.discount_percent}%
+                  {product.stock <= 5 && product.stock > 0 && (
+                    <div className="absolute bottom-2 left-2 bg-yellow-500/90 backdrop-blur-xs text-black text-[9px] font-extrabold uppercase px-2 py-0.5 rounded shadow-xs z-10">
+                      ⚠️ {t('limited_stock')}
                     </div>
                   )}
                 </div>
                 
-                {/* Info */}
                 <div className="p-4 flex flex-col flex-1">
+                  <span className="text-[10px] text-emas font-bold uppercase tracking-wider mb-1 block">{product.categories?.name}</span>
                   <h3 className="text-sm font-medium text-zinc-700 leading-snug line-clamp-2 mb-2 group-hover:text-emas transition-colors">
                     {product.name}
                   </h3>
                   
                   <div className="mt-auto pt-3 border-t border-gray-50">
-                    {product.discount_percent > 0 && product.original_price ? (
-                      <div className="space-y-1 mb-2">
+                    <div className="space-y-1 mb-2">
+                      {discountPercent > 0 && originalPrice ? (
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] font-bold text-red-500 bg-red-50 px-1.5 py-0.5 rounded">
-                            {product.discount_percent}%
-                          </span>
                           <span className="text-xs text-zinc-400 line-through">
-                            Rp {Number(product.original_price).toLocaleString('id-ID')}
+                            {formatPrice(originalPrice, currency, rates)}
                           </span>
                         </div>
-                        <div className="text-hitam-gelap font-bold text-base leading-none">
-                          Rp {Number(product.price).toLocaleString('id-ID')}
-                        </div>
+                      ) : null}
+                      <div className="text-hitam-gelap font-bold text-base leading-none">
+                        {formatPrice(currentPrice, currency, rates)}
                       </div>
-                    ) : (
-                      <div className="text-hitam-gelap font-bold text-lg leading-none mb-3">
-                        Rp {product.price ? Number(product.price).toLocaleString('id-ID') : '-'}
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-zinc-500">
+                      <div className="flex items-center gap-1">
+                        <span className="text-emas font-semibold">★</span>
+                        <span>{product.rating ? Number(product.rating).toFixed(1) : '5.0'}</span>
                       </div>
-                    )}
-                    <div className="flex items-center justify-end text-[11px] text-zinc-500">
-                      <div>Terjual {soldCount}</div>
+                      <div>{t('sold')} {soldCount}</div>
                     </div>
                   </div>
                 </div>
@@ -554,8 +558,8 @@ export default function Home() {
         {featuredProducts.length === 0 && (
           <div className="bg-white rounded-2xl p-16 text-center border border-gray-100 shadow-sm mt-4 flex flex-col items-center justify-center">
              <Package size={48} className="mb-4 text-zinc-200" />
-             <p className="text-lg font-medium text-zinc-500">Belum ada produk aktif</p>
-             <p className="text-sm text-zinc-400 mt-1">Nantikan koleksi terbaru kami segera.</p>
+             <p className="text-lg font-medium text-zinc-500">{t('no_products')}</p>
+             <p className="text-sm text-zinc-400 mt-1">{t('no_products_desc')}</p>
           </div>
         )}
       </div>
@@ -568,7 +572,7 @@ export default function Home() {
             {/* Reviews Summary */}
             <div className="p-8 md:p-10 border-b md:border-b-0 md:border-r border-gray-100 bg-gray-50/50 flex flex-col justify-center items-center">
               <div className="text-center mb-6">
-                <h2 className="text-3xl font-playfair font-bold text-hitam-gelap mb-2">Penilaian Store Kami</h2>
+                <h2 className="text-3xl font-playfair font-bold text-hitam-gelap mb-2">{t('store_rating')}</h2>
                 <div className="flex items-center justify-center gap-3 mb-2">
                   <span className="text-5xl font-bold text-emas">{avgRating > 0 ? avgRating : '-'}</span>
                   <div className="flex flex-col items-start">
@@ -577,7 +581,7 @@ export default function Home() {
                         <Star key={star} size={20} fill={star <= Math.round(avgRating) ? "currentColor" : "none"} strokeWidth={star <= Math.round(avgRating) ? 0 : 2} className={star <= Math.round(avgRating) ? "" : "text-gray-300"} />
                       ))}
                     </div>
-                    <span className="text-sm text-zinc-500">{reviews.length} ulasan</span>
+                    <span className="text-sm text-zinc-500">{reviews.length} {t('reviews_count')}</span>
                   </div>
                 </div>
               </div>
@@ -587,13 +591,13 @@ export default function Home() {
                 className="flex items-center justify-center gap-2 bg-hitam hover:bg-emas text-white hover:text-black px-6 py-3 rounded-xl text-sm font-bold shadow-md hover:shadow-glow transition-all duration-300 border border-zinc-800"
               >
                 <MessageSquare size={18} />
-                Berikan Ulasan
+                {t('leave_review')}
               </button>
             </div>
 
             {/* Reviews List */}
             <div className="col-span-1 md:col-span-2 p-8 md:p-10 max-h-[600px] overflow-y-auto bg-white custom-scrollbar">
-              <h3 className="text-xl font-bold text-hitam-gelap mb-6">Ulasan Terbaru</h3>
+              <h3 className="text-xl font-bold text-hitam-gelap mb-6">{t('recent_reviews')}</h3>
               
               <div className="space-y-6">
                 {reviews.length > 0 ? reviews.map(review => (
@@ -601,7 +605,9 @@ export default function Home() {
                     <div className="flex justify-between items-start mb-2">
                       <div>
                         <p className="font-bold text-hitam">{review.user_id ? review.profiles?.full_name : review.guest_name}</p>
-                        <p className="text-xs text-gray-400">{new Date(review.created_at).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                        <p className="text-xs text-gray-400">
+                          {new Date(review.created_at).toLocaleDateString(language === 'ID' ? 'id-ID' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                        </p>
                       </div>
                       <div className="flex text-emas">
                         {[...Array(5)].map((_, i) => (
@@ -615,14 +621,14 @@ export default function Home() {
                       <div className="mt-4 ml-4 bg-gray-50 border-l-2 border-emas p-3 rounded-r-lg">
                         <div className="flex items-center gap-1 mb-1">
                           <CornerDownRight size={14} className="text-emas" />
-                          <span className="text-xs font-bold text-emas">Balasan Djiharkah Store</span>
+                          <span className="text-xs font-bold text-emas">{t('admin_reply')}</span>
                         </div>
                         <p className="text-sm text-gray-700">{review.admin_reply}</p>
                       </div>
                     )}
                   </div>
                 )) : (
-                  <p className="text-gray-500 text-center py-10">Belum ada ulasan toko. Jadilah yang pertama memberikan ulasan!</p>
+                  <p className="text-gray-500 text-center py-10">{t('no_reviews')}</p>
                 )}
               </div>
             </div>
@@ -640,7 +646,7 @@ export default function Home() {
             {/* Modal Header */}
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 bg-gray-50/50">
               <h3 className="font-bold text-hitam-gelap flex items-center gap-2 text-lg">
-                <MessageSquare size={20} className="text-emas" /> Berikan Ulasan
+                <MessageSquare size={20} className="text-emas" /> {t('leave_review')}
               </h3>
               <button 
                 onClick={() => {
@@ -656,7 +662,7 @@ export default function Home() {
             {/* Modal Body / Form */}
             <form onSubmit={handleReviewSubmit} noValidate className="p-6 space-y-4">
               <div>
-                <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Rating Anda</label>
+                <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">{t('your_rating')}</label>
                 <div className="flex items-center gap-2">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <button
@@ -677,11 +683,11 @@ export default function Home() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Informasi Anda</label>
+                <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">{t('your_info')}</label>
                 <div className="grid grid-cols-2 gap-3">
                   <input 
                     type="text" 
-                    placeholder="Nama Lengkap" 
+                    placeholder={t('full_name')} 
                     value={reviewForm.guest_name}
                     onChange={(e) => setReviewForm({...reviewForm, guest_name: e.target.value})}
                     className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-emas transition-all bg-gray-50/50 focus:bg-white"
@@ -689,7 +695,7 @@ export default function Home() {
                   />
                   <input 
                     type="text" 
-                    placeholder="Nomor Telepon" 
+                    placeholder={t('phone_number')} 
                     value={reviewForm.guest_phone}
                     onChange={(e) => setReviewForm({...reviewForm, guest_phone: e.target.value})}
                     className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-emas transition-all bg-gray-50/50 focus:bg-white"
@@ -699,9 +705,9 @@ export default function Home() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Ulasan / Pengalaman</label>
+                <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">{t('comment_label')}</label>
                 <textarea 
-                  placeholder="Bagaimana pengalaman Anda berbelanja di sini?"
+                  placeholder={t('comment_placeholder')}
                   value={reviewForm.comment}
                   onChange={(e) => setReviewForm({...reviewForm, comment: e.target.value})}
                   className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-emas transition-all bg-gray-50/50 focus:bg-white min-h-[100px]"
@@ -710,7 +716,7 @@ export default function Home() {
               </div>
 
               {reviewMessage && (
-                <p className={`text-xs text-center font-medium ${reviewMessage.includes('Terima') ? 'text-green-600' : 'text-red-500'}`}>{reviewMessage}</p>
+                <p className={`text-xs text-center font-medium ${reviewMessage.includes('Terima') || reviewMessage.includes('Thank') ? 'text-green-600' : 'text-red-500'}`}>{reviewMessage}</p>
               )}
 
               <button 
@@ -718,7 +724,7 @@ export default function Home() {
                 disabled={isSubmittingReview}
                 className="w-full bg-hitam text-white py-3 rounded-xl text-sm font-bold hover:bg-emas hover:text-black transition-colors disabled:opacity-50 shadow-md hover:shadow-glow"
               >
-                {isSubmittingReview ? 'Mengirim...' : 'Kirim Ulasan'}
+                {isSubmittingReview ? t('submitting') : t('submit_review')}
               </button>
             </form>
           </div>

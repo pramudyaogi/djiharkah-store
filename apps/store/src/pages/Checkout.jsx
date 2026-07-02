@@ -2,18 +2,26 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Store, ChevronLeft, MapPin, Loader2, X, Check, Copy, ChevronDown, Search } from 'lucide-react';
+import useCurrencyStore from '../store/useCurrencyStore';
+import { formatPrice } from '../utils/currencyHelper';
+import { useTranslation } from '../utils/translations';
+import { MapContainer, TileLayer, Circle, useMap, useMapEvents } from 'react-leaflet';
+import L from 'leaflet';
 
 const countryCodesList = [
   { name: 'Indonesia', code: '+62', flag: '🇮🇩' },
   { name: 'Malaysia', code: '+60', flag: '🇲🇾' },
   { name: 'Singapore', code: '+65', flag: '🇸🇬' },
   { name: 'Brunei', code: '+673', flag: '🇧🇳' },
+  { name: 'Thailand', code: '+66', flag: '🇹🇭' },
+  { name: 'Philippines', code: '+63', flag: '🇵🇭' },
+  { name: 'Japan', code: '+81', flag: '🇯🇵' },
+  { name: 'China', code: '+86', flag: '🇨🇳' },
+  { name: 'Germany', code: '+49', flag: '🇩🇪' },
   { name: 'Saudi Arabia', code: '+966', flag: '🇸🇦' },
   { name: 'United Kingdom', code: '+44', flag: '🇬🇧' },
   { name: 'United States', code: '+1', flag: '🇺🇸' },
 ];
-import { MapContainer, TileLayer, Circle, useMap, useMapEvents } from 'react-leaflet';
-import L from 'leaflet';
 
 // Helper component: moves map view when coords change
 function MapUpdater({ center }) {
@@ -41,6 +49,8 @@ function MapClickHandler({ setCoords }) {
 }
 
 export default function Checkout() {
+  const { currency, rates } = useCurrencyStore();
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const { product, quantity } = location.state || {};
@@ -76,6 +86,7 @@ export default function Checkout() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const dropdownRef = useRef(null);
+  const [notes, setNotes] = useState('');
 
   // Sync combined phone number to formData.phone
   useEffect(() => {
@@ -86,6 +97,32 @@ export default function Checkout() {
     }
   }, [selectedCountry, localPhone]);
 
+  // Sync default phone country with selected currency
+  useEffect(() => {
+    if (currency) {
+      const currencyToCountryCode = {
+        IDR: '+62',
+        MYR: '+60',
+        SGD: '+65',
+        BND: '+673',
+        THB: '+66',
+        PHP: '+63',
+        JPY: '+81',
+        CNY: '+86',
+        EUR: '+49',
+        USD: '+1'
+      };
+      const targetCode = currencyToCountryCode[currency];
+      if (targetCode) {
+        const matched = countryCodesList.find(c => c.code === targetCode);
+        if (matched) {
+          setSelectedCountry(matched);
+        }
+      }
+    }
+  }, [currency]);
+
+
   // Click outside listener for country code dropdown
   useEffect(() => {
     if (!showDropdown) return;
@@ -95,72 +132,20 @@ export default function Checkout() {
       }
     };
     document.addEventListener('mousedown', handleOutsideClick);
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
   }, [showDropdown]);
 
-  const filteredCountries = countryCodesList.filter(c =>
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  // Filter country codes list
+  const filteredCountries = countryCodesList.filter(c => 
+    c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     c.code.includes(searchTerm)
   );
 
-  // Structured address state (in modal)
-  const [addressDetails, setAddressDetails] = useState({
-    street: '',
-    subdistrict: '', // Kecamatan
-    city: '',        // Kota/Kabupaten
-    province: '',    // Provinsi
-    postalCode: '',  // Kode Pos
-    country: 'Indonesia'
-  });
-  
-  // Shipping cost states
-  const [shippingRates, setShippingRates] = useState([]);
+  // shipping calculation state
   const [shippingCost, setShippingCost] = useState(0);
-
-  useEffect(() => {
-    async function fetchShippingRates() {
-      try {
-        const { data, error } = await supabase
-          .from('shipping_rates')
-          .select('*');
-        if (data && !error) {
-          setShippingRates(data);
-        }
-      } catch (err) {
-        console.error('Error fetching shipping rates:', err);
-      }
-    }
-    fetchShippingRates();
-  }, []);
-
-  // Scroll to top when order success screen is shown
-  useEffect(() => {
-    if (success) {
-      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-    }
-  }, [success]);
-
-  const calculateShipping = (provinceName) => {
-    if (product?.free_shipping === true) {
-      setShippingCost(0);
-      return;
-    }
-    if (!provinceName) {
-      setShippingCost(0);
-      return;
-    }
-    const matchedRate = shippingRates.find(r => 
-      r.province.toLowerCase().trim() === provinceName.toLowerCase().trim()
-    );
-    if (matchedRate) {
-      setShippingCost(Number(matchedRate.cost));
-    } else {
-      setShippingCost(20000); // Fallback rate
-    }
-  };
-  
-  // Temporary addressDetails for editing in modal
-  const [tempAddress, setTempAddress] = useState({
+  const [addressDetails, setAddressDetails] = useState({
     street: '',
     subdistrict: '',
     city: '',
@@ -168,20 +153,50 @@ export default function Checkout() {
     postalCode: '',
     country: 'Indonesia'
   });
-
+  const [tempAddress, setTempAddress] = useState({ ...addressDetails });
   const [addressErrors, setAddressErrors] = useState({});
-
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [mapCoords, setMapCoords] = useState([-6.2088, 106.8456]); // Default: Jakarta
+
+  // Leaflet Map Coordinates (Default: Jakarta Barat center)
+  const [mapCoords, setMapCoords] = useState([-6.1683, 106.7588]);
   const [geocoding, setGeocoding] = useState(false);
   const [geocodeError, setGeocodeError] = useState('');
+  
   const geocodeTimerRef = useRef(null);
 
-  if (!product) return <Navigate to="/" replace />;
+  useEffect(() => {
+    if (product && product.free_shipping !== false) {
+      setShippingCost(0);
+    }
+  }, [product]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const calculateShipping = (provinceName) => {
+    if (product && product.free_shipping !== false) {
+      setShippingCost(0);
+      return;
+    }
+    if (!provinceName) return;
+    const isDomestic = provinceName.toLowerCase().includes('indonesia') || 
+                       provinceName.toLowerCase().includes('id') || 
+                       provinceName.toLowerCase().includes('dki') || 
+                       provinceName.toLowerCase().includes('jawa') ||
+                       provinceName.toLowerCase().includes('sumatera') ||
+                       provinceName.toLowerCase().includes('bali') ||
+                       provinceName.toLowerCase().includes('sulawesi') ||
+                       provinceName.toLowerCase().includes('kalimantan') ||
+                       provinceName.toLowerCase().includes('papua') ||
+                       provinceName.toLowerCase().includes('nusa');
+                       
+    if (isDomestic) {
+      setShippingCost(15000); // Standard flat rate for Indonesia
+    } else {
+      setShippingCost(150000); // Flat rate for international shipping
+    }
   };
 
   const handleAddressChange = (e) => {
@@ -189,11 +204,11 @@ export default function Checkout() {
     setTempAddress(prev => {
       const updated = { ...prev, [name]: value };
       
-      // Auto geocode as the user fills the form (debounced)
-      setGeocodeError('');
-      if (geocodeTimerRef.current) clearTimeout(geocodeTimerRef.current);
+      // Clear geocode timer
+      if (geocodeTimerRef.current) {
+        clearTimeout(geocodeTimerRef.current);
+      }
       
-      // Do not trigger geocoding when only editing the street field
       if (name === 'street') {
         return updated;
       }
@@ -229,10 +244,10 @@ export default function Checkout() {
         const { lat, lon } = data[0];
         setMapCoords([parseFloat(lat), parseFloat(lon)]);
       } else {
-        setGeocodeError('Area tidak ditemukan otomatis. Anda bisa klik di peta untuk menentukan area pengiriman.');
+        setGeocodeError(t('geocode_error'));
       }
     } catch {
-      setGeocodeError('Gagal memuat peta otomatis.');
+      setGeocodeError(t('geocode_load_error'));
     } finally {
       setGeocoding(false);
     }
@@ -250,16 +265,16 @@ export default function Checkout() {
     // Check validation of structured address
     const errors = {};
     if (!tempAddress.street.trim()) {
-      errors.street = 'Detail alamat/jalan wajib diisi.';
+      errors.street = t('street_required');
     }
     if (!tempAddress.city.trim()) {
-      errors.city = 'Kota/kabupaten wajib diisi.';
+      errors.city = t('city_required');
     }
     if (!tempAddress.province.trim()) {
-      errors.province = 'Provinsi wajib diisi.';
+      errors.province = t('province_required');
     }
     if (!tempAddress.country.trim()) {
-      errors.country = 'Negara wajib diisi.';
+      errors.country = t('country_required');
     }
     
     if (Object.keys(errors).length > 0) {
@@ -294,9 +309,9 @@ export default function Checkout() {
   const handleCheckout = async (e) => {
     e.preventDefault();
     const errors = {};
-    if (!formData.name.trim()) errors.name = 'Nama lengkap wajib diisi.';
-    if (!formData.phone.trim()) errors.phone = 'Nomor telepon wajib diisi.';
-    if (!formData.address.trim()) errors.address = 'Alamat lengkap wajib diisi.';
+    if (!formData.name.trim()) errors.name = t('name_required');
+    if (!formData.phone.trim()) errors.phone = t('phone_required');
+    if (!formData.address.trim()) errors.address = t('address_required');
     if (Object.keys(errors).length > 0) { setValidationErrors(errors); return; }
 
     setValidationErrors({});
@@ -309,7 +324,7 @@ export default function Checkout() {
         p_name: formData.name,
         p_phone: formData.phone,
         p_email: '', // Removed email field from UI
-        p_address: formData.address,
+        p_address: notes.trim() ? `${formData.address}\n\nCatatan: ${notes.trim()}` : formData.address,
         p_product_id: product.id,
         p_quantity: quantity,
         p_unit_price: product.price,
@@ -323,11 +338,15 @@ export default function Checkout() {
       setTrackingCode(orderData.tracking_code);
       setSuccess(true);
     } catch (err) {
-      setError(err.message || 'Gagal memproses pesanan.');
+      setError(err.message || t('failed_create_order'));
     } finally {
       setLoading(false);
     }
   };
+
+  if (!product) {
+    return <Navigate to="/products" replace />;
+  }
 
   if (success) {
     return (
@@ -335,10 +354,10 @@ export default function Checkout() {
         <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
           <Store size={40} />
         </div>
-        <h1 className="text-3xl font-playfair font-bold text-hitam mb-4">Pesanan Berhasil Dibuat!</h1>
-        <p className="text-gray-600 mb-6">Terima kasih telah berbelanja di Djiharkah Store. Tim kami akan segera menghubungi Anda melalui nomor telepon yang diberikan.</p>
+        <h1 className="text-3xl font-playfair font-bold text-hitam mb-4">{t('order_created_title')}</h1>
+        <p className="text-gray-600 mb-6">{t('checkout_success_desc')}</p>
         <div className="bg-gray-50 border border-gray-200 p-6 rounded-2xl max-w-sm mx-auto mb-8">
-          <p className="text-sm text-gray-500 mb-2 uppercase tracking-wide font-bold">Kode Pesanan Anda</p>
+          <p className="text-sm text-gray-500 mb-2 uppercase tracking-wide font-bold">{t('order_code')}</p>
           <div className="flex items-center justify-center gap-3 mt-1">
             <span className="text-2xl font-mono font-bold text-emas tracking-wider select-all">
               {trackingCode || 'MEMPROSES...'}
@@ -354,18 +373,25 @@ export default function Checkout() {
             >
               {copied ? (
                 <span className="flex items-center gap-1 text-xs text-green-600 font-semibold px-0.5">
-                  <Check size={14} /> Tersalin
+                  <Check size={14} /> {t('copied')}
                 </span>
               ) : (
                 <Copy size={15} />
               )}
             </button>
           </div>
-          <p className="text-xs text-gray-400 mt-3">Simpan kode ini untuk melacak status pesanan Anda.</p>
+          <div className="mt-5 p-4 bg-zinc-950 dark:bg-zinc-900 border border-emas/30 rounded-2xl max-w-xs mx-auto text-center shadow-lg transition-all duration-300 hover:border-emas/60">
+            <p className="text-emas font-extrabold text-[11px] uppercase tracking-widest mb-1.5 flex items-center justify-center gap-1.5">
+              <span>⚠️</span> {t('important')}
+            </p>
+            <p className="text-gray-200 dark:text-gray-100 text-xs font-semibold leading-relaxed">
+              {t('save_code_desc')}
+            </p>
+          </div>
         </div>
         <div className="flex justify-center gap-4">
-          <button onClick={() => navigate('/track-order?code=' + trackingCode)} className="bg-emas text-hitam px-6 py-3 font-bold hover:bg-hitam hover:text-emas transition-colors rounded-lg shadow-sm">Lacak Pesanan</button>
-          <button onClick={() => navigate('/')} className="bg-gray-100 text-gray-700 px-6 py-3 font-bold hover:bg-gray-200 transition-colors rounded-lg shadow-sm">Kembali ke Beranda</button>
+          <button onClick={() => navigate('/track-order?code=' + trackingCode)} className="bg-emas text-hitam px-6 py-3 font-bold hover:bg-hitam hover:text-emas transition-colors rounded-lg shadow-sm">{t('track_order')}</button>
+          <button onClick={() => navigate('/')} className="bg-gray-100 text-gray-700 px-6 py-3 font-bold hover:bg-gray-200 transition-colors rounded-lg shadow-sm">{t('back_to_home')}</button>
         </div>
       </div>
     );
@@ -377,12 +403,12 @@ export default function Checkout() {
 
         <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-gray-500 hover:text-emas transition-colors mb-8 group">
           <ChevronLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-          Kembali
+          {t('back')}
         </button>
 
         <div className="mb-10">
           <h1 className="text-3xl font-playfair font-bold text-hitam mb-1">Checkout</h1>
-          <p className="text-sm text-gray-400">Lengkapi informasi di bawah untuk menyelesaikan pesanan Anda.</p>
+          <p className="text-sm text-gray-400">{t('checkout_subtitle')}</p>
         </div>
 
         {error && <p className="text-red-500 text-sm mb-6 font-medium">{error}</p>}
@@ -392,19 +418,19 @@ export default function Checkout() {
           {/* LEFT: Form */}
           <div className="space-y-6">
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-7">Informasi Pembeli</h3>
+              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-7">{t('recipient_details')}</h3>
               <form id="guest-checkout-form" onSubmit={handleCheckout} className="space-y-5">
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Nama Lengkap *</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">{t('recipient_name')} *</label>
                   <input
                     type="text" name="name" value={formData.name} onChange={handleChange}
-                    placeholder="Nama Anda"
+                    placeholder={t('recipient_name_placeholder')}
                     className={`w-full px-4 py-3 bg-gray-50/80 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white transition-all placeholder:text-gray-300 ${validationErrors.name ? 'border-red-300' : 'border-gray-200 focus:border-emas focus:ring-1 focus:ring-emas/20'}`}
                   />
                   {validationErrors.name && <p className="text-red-500 text-xs mt-1.5 font-medium">{validationErrors.name}</p>}
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">No Telepon *</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">{t('phone_number')} *</label>
                   <div className="flex gap-2 relative" ref={dropdownRef}>
                     {/* Country Code Selector */}
                     <div className="relative shrink-0">
@@ -424,7 +450,7 @@ export default function Checkout() {
                             <Search size={14} className="text-gray-400 shrink-0" />
                             <input
                               type="text"
-                              placeholder="Cari negara..."
+                              placeholder={t('search_country')}
                               value={searchTerm}
                               onChange={(e) => setSearchTerm(e.target.value)}
                               className="w-full bg-transparent text-xs text-gray-900 outline-none"
@@ -450,7 +476,7 @@ export default function Checkout() {
                               </button>
                             ))}
                             {filteredCountries.length === 0 && (
-                              <div className="px-3 py-2 text-xs text-gray-400 text-center">Negara tidak ditemukan</div>
+                              <div className="px-3 py-2 text-xs text-gray-400 text-center">{t('country_not_found')}</div>
                             )}
                           </div>
                         </div>
@@ -479,14 +505,14 @@ export default function Checkout() {
                 
                 {/* Alamat Pengiriman Section */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Alamat Pengiriman *</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">{t('shipping_address')} *</label>
                   
                   {formData.address ? (
                     <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-3 relative group">
                       <div className="flex items-start gap-2.5">
                         <MapPin size={16} className="text-emas mt-0.5 shrink-0" />
                         <div>
-                          <p className="text-sm font-semibold text-hitam">Alamat Penerima</p>
+                          <p className="text-sm font-semibold text-hitam">{t('shipping_address')}</p>
                           <p className="text-xs text-gray-600 mt-1 leading-relaxed">{formData.address}</p>
                         </div>
                       </div>
@@ -495,7 +521,7 @@ export default function Checkout() {
                         onClick={openAddressModal}
                         className="text-xs font-bold text-emas hover:text-hitam transition-colors mt-2 underline"
                       >
-                        Ubah Alamat
+                        {t('change_address')}
                       </button>
                     </div>
                   ) : (
@@ -508,11 +534,25 @@ export default function Checkout() {
                         }`}
                       >
                         <MapPin size={20} />
-                        Isi Alamat Pengiriman
+                        {t('fill_address')}
                       </button>
                       {validationErrors.address && <p className="text-red-500 text-xs mt-1.5 font-medium">{validationErrors.address}</p>}
                     </div>
                   )}
+                </div>
+
+                {/* Order Notes (Pesan) */}
+                <div className="mt-5">
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                    {t('order_notes')}
+                  </label>
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder={t('order_notes_placeholder')}
+                    rows={3}
+                    className="w-full px-4 py-3 bg-gray-50/80 border border-gray-200 rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:border-emas focus:ring-1 focus:ring-emas/20 transition-all placeholder:text-gray-300 resize-none"
+                  />
                 </div>
               </form>
             </div>
@@ -520,7 +560,7 @@ export default function Checkout() {
 
           {/* RIGHT: Order Summary */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 h-fit">
-            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-7">Ringkasan Pesanan</h3>
+            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-7">{t('order_summary')}</h3>
             <div className="flex gap-4 mb-6 pb-6 border-b border-gray-100">
               <div className="w-20 h-20 rounded-xl overflow-hidden shrink-0 border border-gray-100 bg-gray-50">
                 {product.image_url && <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />}
@@ -531,39 +571,39 @@ export default function Checkout() {
                   <div className="space-y-1 text-xs">
                     {promoQty > 0 && (
                       <p className="text-red-500 font-medium">
-                        {promoQty} × Rp {promoPrice.toLocaleString('id-ID')} (Harga Promo)
+                        {promoQty} × {formatPrice(promoPrice, currency, rates)} ({t('promo_price_label')})
                       </p>
                     )}
                     {normalQty > 0 && (
                       <p className="text-gray-500">
-                        {normalQty} × Rp {normalPrice.toLocaleString('id-ID')} (Harga Normal)
+                        {normalQty} × {formatPrice(normalPrice, currency, rates)} ({t('normal_price_label')})
                       </p>
                     )}
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-400">{quantity} × Rp {product.price.toLocaleString('id-ID')}</p>
+                  <p className="text-xs text-gray-400">{quantity} × {formatPrice(product.price, currency, rates)}</p>
                 )}
               </div>
             </div>
             <div className="space-y-3 mb-6 text-sm">
               <div className="flex justify-between text-gray-500">
-                <span>Subtotal</span>
-                <span>Rp {totalSubtotal.toLocaleString('id-ID')}</span>
+                <span>{t('subtotal')}</span>
+                <span>{formatPrice(totalSubtotal, currency, rates)}</span>
               </div>
               <div className="flex justify-between text-gray-500">
-                <span>Ongkos Kirim</span>
+                <span>{t('shipping_cost')}</span>
                 {product.free_shipping !== false ? (
-                  <span className="text-green-600 font-semibold">Gratis Ongkir</span>
+                  <span className="text-green-600 font-semibold">{t('free_shipping')}</span>
                 ) : shippingCost > 0 ? (
-                  <span className="font-semibold text-hitam">Rp {shippingCost.toLocaleString('id-ID')}</span>
+                  <span className="font-semibold text-hitam">{formatPrice(shippingCost, currency, rates)}</span>
                 ) : (
-                  <span className="text-gray-400">Belum dihitung (isi alamat)</span>
+                  <span className="text-gray-400">{t('not_calculated')}</span>
                 )}
               </div>
             </div>
             <div className="flex justify-between items-center pt-5 border-t border-gray-100 mb-7">
-              <span className="font-bold text-hitam text-sm">Total</span>
-              <span className="text-2xl font-bold text-hitam">Rp {(totalSubtotal + shippingCost).toLocaleString('id-ID')}</span>
+              <span className="font-bold text-hitam text-sm">{t('total')}</span>
+              <span className="text-2xl font-bold text-hitam">{formatPrice(totalSubtotal + shippingCost, currency, rates)}</span>
             </div>
             <button
               form="guest-checkout-form"
@@ -571,9 +611,9 @@ export default function Checkout() {
               disabled={loading}
               className="w-full bg-emas text-hitam py-4 rounded-xl font-bold text-sm hover:bg-yellow-400 hover:shadow-[0_8px_20px_rgba(212,168,73,0.3)] hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50"
             >
-              {loading ? 'Memproses...' : 'Lanjut Checkout →'}
+              {loading ? t('place_order_processing') : `${t('place_order_btn')} →`}
             </button>
-            <p className="text-center text-xs text-gray-400 mt-4">Tim kami akan menghubungi Anda setelah pesanan diterima.</p>
+            <p className="text-center text-xs text-gray-400 mt-4">{t('checkout_footer_desc')}</p>
           </div>
 
         </div>
@@ -587,8 +627,8 @@ export default function Checkout() {
             {/* Modal Header */}
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100">
               <div>
-                <h3 className="text-lg font-bold text-hitam">Isi Alamat Pengiriman</h3>
-                <p className="text-xs text-gray-400 mt-0.5">Lengkapi form di bawah. Peta otomatis mencari koordinat yang sesuai.</p>
+                <h3 className="text-lg font-bold text-hitam">{t('fill_address')}</h3>
+                <p className="text-xs text-gray-400 mt-0.5">{t('address_modal_desc')}</p>
               </div>
               <button 
                 type="button" 
@@ -605,10 +645,10 @@ export default function Checkout() {
               {/* Form Fields */}
               <form onSubmit={saveAddressModal} noValidate className="space-y-4">
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Jalan / Detail Alamat *</label>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('street_address_label')}</label>
                   <textarea
                     name="street" rows={2} value={tempAddress.street} onChange={handleAddressChange}
-                    placeholder="Nama Jalan, Blok, No. Rumah, RT/RW, Apartemen..."
+                    placeholder={t('street_address_placeholder')}
                     className={`w-full px-3 py-2 bg-gray-50 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-emas/20 transition-all placeholder:text-gray-300 resize-none ${
                       addressErrors.street ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
                     }`}
@@ -620,18 +660,18 @@ export default function Checkout() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Kecamatan</label>
+                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('subdistrict')}</label>
                     <input
                       type="text" name="subdistrict" value={tempAddress.subdistrict} onChange={handleAddressChange}
-                      placeholder="Kecamatan"
+                      placeholder={t('subdistrict')}
                       className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:border-emas focus:ring-1 focus:ring-emas/20 transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Kota / Kabupaten *</label>
+                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('city')} *</label>
                     <input
                       type="text" name="city" value={tempAddress.city} onChange={handleAddressChange}
-                      placeholder="Kota atau Kabupaten"
+                      placeholder={t('city')}
                       className={`w-full px-3 py-2 bg-gray-50 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-emas/20 transition-all ${
                         addressErrors.city ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
                       }`}
@@ -644,10 +684,10 @@ export default function Checkout() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Provinsi *</label>
+                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('province')} *</label>
                     <input
                       type="text" name="province" value={tempAddress.province} onChange={handleAddressChange}
-                      placeholder="Provinsi"
+                      placeholder={t('province')}
                       className={`w-full px-3 py-2 bg-gray-50 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-emas/20 transition-all ${
                         addressErrors.province ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
                       }`}
@@ -657,20 +697,20 @@ export default function Checkout() {
                     )}
                   </div>
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Kode Pos</label>
+                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('postal_code')}</label>
                     <input
                       type="text" name="postalCode" value={tempAddress.postalCode} onChange={handleAddressChange}
-                      placeholder="Kode Pos"
+                      placeholder={t('postal_code')}
                       className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:border-emas focus:ring-1 focus:ring-emas/20 transition-all"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Negara *</label>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('country')} *</label>
                   <input
                     type="text" name="country" value={tempAddress.country} onChange={handleAddressChange}
-                    placeholder="Negara"
+                    placeholder={t('country')}
                     className={`w-full px-3 py-2 bg-gray-50 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-emas/20 transition-all ${
                       addressErrors.country ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
                     }`}
@@ -685,14 +725,14 @@ export default function Checkout() {
                     type="submit"
                     className="flex-1 bg-emas text-hitam py-2.5 rounded-xl font-bold text-sm hover:bg-yellow-400 transition-colors flex items-center justify-center gap-1.5 shadow-sm"
                   >
-                    <Check size={16} /> Simpan Alamat
+                    <Check size={16} /> {t('save_address')}
                   </button>
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
                     className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-semibold transition-colors"
                   >
-                    Batal
+                    {t('cancel')}
                   </button>
                 </div>
               </form>
@@ -702,12 +742,12 @@ export default function Checkout() {
                 <div className="px-4 py-2 bg-white border-b border-gray-100 flex items-center justify-between text-xs font-semibold text-gray-500">
                   <div className="flex items-center gap-1.5">
                     <MapPin size={14} className="text-emas" />
-                    <span>Titik Lokasi Pengiriman</span>
+                    <span>{t('shipping_location')}</span>
                   </div>
                   {geocoding && (
                     <div className="flex items-center gap-1 text-gray-400">
                       <Loader2 size={11} className="animate-spin" />
-                      Mencari lokasi...
+                      {t('searching_location')}
                     </div>
                   )}
                 </div>
@@ -745,7 +785,7 @@ export default function Checkout() {
                 </div>
 
                 <div className="p-3 bg-white border-t border-gray-100 text-[10px] text-gray-400 leading-normal">
-                  📍 Peta bergerak otomatis sesuai data alamat yang diketik. Anda juga bisa <span className="font-semibold text-gray-500">klik di area peta</span> untuk menyesuaikan titik pusat radius area pengiriman.
+                  {t('map_instruction')}
                 </div>
               </div>
 
