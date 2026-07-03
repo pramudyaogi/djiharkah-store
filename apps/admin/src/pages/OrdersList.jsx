@@ -39,13 +39,23 @@ export default function OrdersList() {
     trackingCode: ''
   });
 
+  const [productModal, setProductModal] = useState({
+    isOpen: false,
+    editIndex: -1,
+    item: { productId: '', quantity: 1, isCustom: false, customName: '', customPrice: '' }
+  });
+
+  const [modalSearchQuery, setModalSearchQuery] = useState('');
+  const [modalCategoryId, setModalCategoryId] = useState('');
+
+
+
   // Manual Order states
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [productsList, setProductsList] = useState([]);
   const [categoriesList, setCategoriesList] = useState([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [selectedCurrency, setSelectedCurrency] = useState('IDR');
-  const [useOriginalPrice, setUseOriginalPrice] = useState(true);
   const [autoCalculateShipping, setAutoCalculateShipping] = useState(true);
 
   const [manualOrder, setManualOrder] = useState({
@@ -61,12 +71,25 @@ export default function OrdersList() {
       country: 'Indonesia'
     },
     notes: '',
-    productId: '',
-    quantity: 1,
-    unitPrice: 0,
+    items: [],
     shippingCost: 0,
+    negotiatedPrice: '',
     status: 'processing'
   });
+  
+  const exchangeRates = {
+    IDR: 1,
+    MYR: 0.00030,
+    SGD: 0.000085,
+    BND: 0.000085,
+    THB: 0.0023,
+    PHP: 0.0035,
+    JPY: 0.0095,
+    CNY: 0.00045,
+    EUR: 0.000058,
+    USD: 0.000063
+  };
+
   const [manualOrderLoading, setManualOrderLoading] = useState(false);
   const [manualOrderErrors, setManualOrderErrors] = useState({});
   const [isAddressSaved, setIsAddressSaved] = useState(false);
@@ -107,56 +130,11 @@ export default function OrdersList() {
     }
   };
 
-  // Sync default phone country with selected currency
-  useEffect(() => {
-    if (selectedCurrency) {
-      const currencyToCountryCode = {
-        IDR: '+62',
-        MYR: '+60',
-        SGD: '+65',
-        BND: '+673',
-        THB: '+66',
-        PHP: '+63',
-        JPY: '+81',
-        CNY: '+86',
-        EUR: '+49',
-        USD: '+1'
-      };
-      const targetCode = currencyToCountryCode[selectedCurrency];
-      if (targetCode) {
-        const matched = countryCodesList.find(c => c.code === targetCode);
-        if (matched) {
-          setManualOrder(prev => ({
-            ...prev,
-            phoneCode: matched.code
-          }));
-        }
-      }
-    }
-  }, [selectedCurrency]);
-
-  // Sync unit price when using original price
-  useEffect(() => {
-    if (useOriginalPrice && manualOrder.productId) {
-      const selectedProd = productsList.find(p => p.id === manualOrder.productId);
-      if (selectedProd) {
-        setManualOrder(prev => ({ ...prev, unitPrice: String(selectedProd.price) }));
-      }
-    }
-    if (!useOriginalPrice && !manualOrder.productId) {
-      setManualOrder(prev => ({ ...prev, unitPrice: '' }));
-    }
-  }, [useOriginalPrice, manualOrder.productId, productsList]);
+  
 
   // Calculate shipping cost automatically (only when address is saved)
   const calculateManualShipping = (provinceName, prodId) => {
     if (!autoCalculateShipping) return;
-
-    const selectedProd = productsList.find(p => p.id === prodId);
-    if (selectedProd && selectedProd.free_shipping !== false) {
-      setManualOrder(prev => ({ ...prev, shippingCost: 0 }));
-      return;
-    }
 
     if (!provinceName?.trim()) {
       setManualOrder(prev => ({ ...prev, shippingCost: 0 }));
@@ -179,22 +157,33 @@ export default function OrdersList() {
   };
 
   const handleSaveAddress = () => {
-    if (!manualOrder.addressDetails.province.trim() || !manualOrder.addressDetails.city.trim() || !manualOrder.addressDetails.street.trim()) {
-      alert("Mohon lengkapi Jalan, Kota, dan Provinsi terlebih dahulu.");
+    const errors = {};
+    if (!manualOrder.addressDetails.street.trim()) errors.street = 'Jalan / Detail alamat wajib diisi';
+    if (!manualOrder.addressDetails.city.trim()) errors.city = 'Kota / Kabupaten wajib diisi';
+    if (!manualOrder.addressDetails.province.trim()) errors.province = 'Provinsi wajib diisi';
+    
+    if (Object.keys(errors).length > 0) {
+      setManualOrderErrors(prev => ({ ...prev, ...errors }));
       return;
     }
+    
+    setManualOrderErrors(prev => {
+      const { street, city, province, address, ...rest } = prev;
+      return rest;
+    });
+    
     setIsAddressSaved(true);
     if (autoCalculateShipping) {
-      calculateManualShipping(manualOrder.addressDetails.province, manualOrder.productId);
+      calculateManualShipping(manualOrder.addressDetails.province);
     }
   };
 
-  // Recalculate shipping if product changes and address is already saved
+  // Recalculate shipping if products change and address is already saved
   useEffect(() => {
     if (isAddressSaved && autoCalculateShipping) {
-      calculateManualShipping(manualOrder.addressDetails.province, manualOrder.productId);
+      calculateManualShipping(manualOrder.addressDetails.province);
     }
-  }, [manualOrder.productId, autoCalculateShipping, isAddressSaved, productsList]);
+  }, [manualOrder.items, autoCalculateShipping, isAddressSaved]);
 
   const resetManualForm = () => {
     setManualOrder({
@@ -203,29 +192,67 @@ export default function OrdersList() {
       phoneLocal: '',
       addressDetails: { street: '', subdistrict: '', city: '', province: '', postalCode: '', country: 'Indonesia' },
       notes: '',
-      productId: '',
-      quantity: 1,
-      unitPrice: '',
+      items: [],
       shippingCost: '',
+      negotiatedPrice: '',
       status: 'processing'
     });
     setSelectedCategoryId('');
     setSelectedCurrency('IDR');
-    setUseOriginalPrice(true);
     setAutoCalculateShipping(true);
     setIsAddressSaved(false);
     setManualOrderErrors({});
   };
 
-  const handleProductChange = (prodId) => {
-    const selectedProd = productsList.find(p => p.id === prodId);
+  
+  const handleOpenProductModal = (index = -1) => {
+    setModalSearchQuery('');
+    setModalCategoryId('');
+    if (index >= 0) {
+      setProductModal({ isOpen: true, editIndex: index, item: { ...manualOrder.items[index] }, errors: {} });
+    } else {
+      setProductModal({ isOpen: true, editIndex: -1, item: { productId: '', quantity: '', isCustom: false, customName: '', customPrice: '' }, errors: {} });
+    }
+  };
+
+  const handleSaveProductModal = () => {
+    const { item, editIndex } = productModal;
+    const errors = {};
+    
+    // Validation
+    if (item.isCustom) {
+      if (!item.customName.trim()) errors.customName = 'Nama produk wajib diisi';
+      if (!item.customPrice || parseFloat(item.customPrice) <= 0) errors.customPrice = 'Harga wajib diisi';
+    } else {
+      if (!item.productId) errors.productId = 'Pilih produk terlebih dahulu';
+    }
+    const qty = parseInt(item.quantity) || 0;
+    if (qty <= 0) errors.quantity = 'Kuantitas minimal 1';
+
+    if (Object.keys(errors).length > 0) {
+      setProductModal(prev => ({ ...prev, errors }));
+      return;
+    }
+
+    setManualOrder(prev => {
+      const newItems = [...prev.items];
+      if (editIndex >= 0) {
+        newItems[editIndex] = { ...item, quantity: qty };
+      } else {
+        newItems.push({ ...item, quantity: qty });
+      }
+      return { ...prev, items: newItems };
+    });
+    setProductModal({ isOpen: false, editIndex: -1, item: { productId: '', quantity: '', isCustom: false, customName: '', customPrice: '' }, errors: {} });
+  };
+
+  const handleRemoveItem = (index) => {
     setManualOrder(prev => ({
       ...prev,
-      productId: prodId,
-      unitPrice: (useOriginalPrice && selectedProd) ? String(selectedProd.price) : prev.unitPrice,
-      quantity: 1
+      items: prev.items.filter((_, i) => i !== index)
     }));
   };
+
 
   const handleManualOrderSubmit = async (e) => {
     e.preventDefault();
@@ -233,21 +260,36 @@ export default function OrdersList() {
     if (!manualOrder.name.trim()) errors.name = 'Nama penerima wajib diisi';
     if (!manualOrder.phoneLocal.trim()) errors.phone = 'Nomor telepon wajib diisi';
     
-    // Validate address details
-    if (!manualOrder.addressDetails.street.trim()) errors.street = 'Jalan / Detail alamat wajib diisi';
-    if (!manualOrder.addressDetails.city.trim()) errors.city = 'Kota / Kabupaten wajib diisi';
-    if (!manualOrder.addressDetails.province.trim()) errors.province = 'Provinsi wajib diisi';
-    if (!manualOrder.addressDetails.country.trim()) errors.country = 'Negara wajib diisi';
-
-    if (!manualOrder.productId) errors.productId = 'Pilih produk terlebih dahulu';
-    if (manualOrder.quantity <= 0) errors.quantity = 'Kuantitas minimal 1';
-    
-    if (manualOrder.productId) {
-      const selectedProd = productsList.find(p => p.id === manualOrder.productId);
-      if (selectedProd && selectedProd.stock < manualOrder.quantity) {
-        errors.quantity = `Stok tidak mencukupi (Tersedia: ${selectedProd.stock})`;
-      }
+    // Validate address details only if status is processing
+    if (manualOrder.status === 'processing') {
+      if (!manualOrder.addressDetails.street.trim()) errors.street = 'Jalan / Detail alamat wajib diisi';
+      if (!manualOrder.addressDetails.city.trim()) errors.city = 'Kota / Kabupaten wajib diisi';
+      if (!manualOrder.addressDetails.province.trim()) errors.province = 'Provinsi wajib diisi';
+      if (!manualOrder.addressDetails.country.trim()) errors.country = 'Negara wajib diisi';
     }
+
+    if (manualOrder.items.length === 0) {
+      errors.items = "Minimal 1 produk harus ditambahkan.";
+    }
+
+    let hasItemErrors = false;
+    manualOrder.items.forEach((item, index) => {
+      if (!item.productId) {
+        errors[`item_product_${index}`] = 'Pilih produk';
+        hasItemErrors = true;
+      }
+      if (item.quantity <= 0) {
+        errors[`item_qty_${index}`] = 'Kuantitas min 1';
+        hasItemErrors = true;
+      }
+      if (item.productId) {
+        const selectedProd = productsList.find(p => p.id === item.productId);
+        if (selectedProd && selectedProd.stock < item.quantity) {
+          errors[`item_qty_${index}`] = `Stok tidak mencukupi (Tersedia: ${selectedProd.stock})`;
+          hasItemErrors = true;
+        }
+      }
+    });
 
     if (Object.keys(errors).length > 0) {
       setManualOrderErrors(errors);
@@ -260,7 +302,6 @@ export default function OrdersList() {
     try {
       const fullPhone = `${manualOrder.phoneCode} ${manualOrder.phoneLocal.trim()}`;
       
-      // Format address exactly like Checkout.jsx
       const parts = [
         manualOrder.addressDetails.street.trim(),
         manualOrder.addressDetails.subdistrict.trim() ? `Kec. ${manualOrder.addressDetails.subdistrict.trim()}` : '',
@@ -275,36 +316,47 @@ export default function OrdersList() {
         ? `${formattedAddressOnly}\n\nCatatan: ${manualOrder.notes.trim()}` 
         : formattedAddressOnly;
 
-      const { data: orderData, error: rpcError } = await supabase.rpc('create_guest_order', {
+      const formattedItems = manualOrder.items.map(item => {
+        if (item.isCustom) {
+          return {
+            product_id: null,
+            custom_product_name: item.customName.trim(),
+            quantity: parseInt(item.quantity) || 1,
+            unit_price: parseFloat(item.customPrice) || 0
+          };
+        } else {
+          const product = productsList.find(p => p.id === item.productId);
+          return {
+            product_id: item.productId,
+            custom_product_name: null,
+            quantity: parseInt(item.quantity) || 1,
+            unit_price: product ? product.price : 0
+          };
+        }
+      });
+
+      const parsedNegotiatedPrice = manualOrder.negotiatedPrice ? parseFloat(manualOrder.negotiatedPrice) : null;
+      const finalNegotiatedPrice = parsedNegotiatedPrice >= 0 ? parsedNegotiatedPrice : null;
+
+      const { data: orderData, error: rpcError } = await supabase.rpc('create_manual_order', {
         p_name: manualOrder.name.trim(),
         p_phone: fullPhone,
         p_email: '',
         p_address: fullAddress,
-        p_product_id: manualOrder.productId,
-        p_quantity: parseInt(manualOrder.quantity) || 1,
-        p_unit_price: parseFloat(manualOrder.unitPrice) || 0,
+        p_status: manualOrder.status,
         p_shipping_cost: parseFloat(manualOrder.shippingCost) || 0,
-        p_promo_qty: 0,
-        p_promo_price: 0,
-        p_normal_qty: parseInt(manualOrder.quantity) || 1,
-        p_normal_price: parseFloat(manualOrder.unitPrice) || 0
+        p_negotiated_price: finalNegotiatedPrice,
+        p_notes: manualOrder.notes.trim(),
+        p_items: formattedItems
       });
 
-      if (rpcError) throw rpcError;
-
-      const orderId = orderData.order_id;
-      const { data: updatedOrder, error: updateError } = await supabase
-        .from('orders')
-        .update({ status: manualOrder.status })
-        .eq('id', orderId)
-        .select('tracking_code')
-        .single();
-
-      if (updateError) throw updateError;
+      if (rpcError) {
+        throw rpcError;
+      }
 
       resetManualForm();
       setIsManualModalOpen(false);
-      setSuccessModal({ isOpen: true, trackingCode: updatedOrder.tracking_code });
+      setSuccessModal({ isOpen: true, trackingCode: orderData.tracking_code });
       fetchOrders();
     } catch (err) {
       console.error(err);
@@ -665,10 +717,24 @@ export default function OrdersList() {
 
             <form onSubmit={handleManualOrderSubmit} className="space-y-5">
               
-              {/* Grid 1: Pelanggan, Mata Uang, Telepon */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {/* Status */}
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Status Pesanan *</label>
+                <select
+                  value={manualOrder.status}
+                  onChange={(e) => setManualOrder(prev => ({ ...prev, status: e.target.value }))}
+                  className="w-full px-4 py-2.5 bg-gray-50 dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-xl text-gray-900 dark:text-zinc-100 text-sm focus:outline-none focus:border-yellow-600 transition-all"
+                >
+                  <option value="processing">Diproses</option>
+                  <option value="delivered">Selesai</option>
+                </select>
+                {productModal.errors?.productId && <p className="text-red-500 text-xs mt-1">{productModal.errors.productId}</p>}
+                  </div>
+
+              {/* Grid 1: Info Pelanggan */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Nama Penerima / Pelanggan *</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Nama Pelanggan *</label>
                   <input
                     type="text"
                     value={manualOrder.name}
@@ -682,32 +748,19 @@ export default function OrdersList() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Mata Uang *</label>
-                  <select
-                    value={selectedCurrency}
-                    onChange={(e) => setSelectedCurrency(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-xl text-gray-900 dark:text-zinc-100 text-sm focus:outline-none focus:border-yellow-600"
-                  >
-                    <option value="IDR">IDR (Rupiah)</option>
-                    <option value="MYR">MYR (Ringgit)</option>
-                    <option value="SGD">SGD (Sing. Dollar)</option>
-                    <option value="BND">BND (Brunei Dollar)</option>
-                    <option value="THB">THB (Baht)</option>
-                    <option value="PHP">PHP (Peso)</option>
-                    <option value="JPY">JPY (Yen)</option>
-                    <option value="CNY">CNY (Yuan)</option>
-                    <option value="EUR">EUR (Euro)</option>
-                    <option value="USD">USD (US Dollar)</option>
-                  </select>
-                </div>
-
-                <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Nomor Telepon *</label>
                   <div className="flex gap-2">
-                    <div className="px-3 py-2.5 bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-800 rounded-xl text-gray-900 dark:text-zinc-100 text-sm font-semibold flex items-center gap-1.5 select-none shrink-0">
-                      <span>{countryCodesList.find(c => c.code === manualOrder.phoneCode)?.flag || '🌐'}</span>
-                      <span>{manualOrder.phoneCode}</span>
-                    </div>
+                    <select
+                      value={manualOrder.phoneCode}
+                      onChange={(e) => setManualOrder(prev => ({ ...prev, phoneCode: e.target.value }))}
+                      className="px-2 py-2.5 bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-800 rounded-xl text-gray-900 dark:text-zinc-100 text-sm font-semibold focus:outline-none focus:border-yellow-600 transition-all shrink-0 cursor-pointer"
+                    >
+                      {countryCodesList.map(c => (
+                        <option key={c.code} value={c.code}>
+                          {c.flag} {c.code}
+                        </option>
+                      ))}
+                    </select>
                     <input
                       type="text"
                       value={manualOrder.phoneLocal}
@@ -725,7 +778,147 @@ export default function OrdersList() {
                 </div>
               </div>
 
-              {/* Alamat Lengkap Pas Kaya Checkout */}
+
+
+              <div className="w-full h-px bg-gray-150 dark:border-zinc-800 my-4" />
+
+              {/* Produk & Harga Negosiasi */}
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Daftar Produk *</h4>
+                  <button type="button" onClick={() => handleOpenProductModal(-1)} className="text-xs font-bold text-yellow-600 dark:text-yellow-500 bg-yellow-50 dark:bg-yellow-500/10 px-3 py-1.5 rounded-lg hover:bg-yellow-100 dark:hover:bg-yellow-500/20 transition-colors flex items-center gap-1">
+                    <span>➕</span> Tambah Produk
+                  </button>
+                </div>
+                
+                <div className={`bg-gray-50 dark:bg-zinc-950 border ${manualOrderErrors.items ? 'border-red-300 dark:border-red-500/50' : 'border-gray-150 dark:border-zinc-850'} rounded-2xl overflow-hidden`}>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm text-gray-500 dark:text-zinc-400">
+                      <thead className="bg-gray-100/50 dark:bg-zinc-900/50 text-[10px] uppercase text-gray-400 dark:text-zinc-500 font-bold border-b border-gray-150 dark:border-zinc-850">
+                        <tr>
+                          <th className="px-4 py-3 min-w-[200px]">Produk</th>
+                          <th className="px-4 py-3 w-32">Kuantitas</th>
+                          <th className="px-4 py-3 w-40 text-right">Harga Satuan</th>
+                          <th className="px-4 py-3 w-40 text-right">Subtotal</th>
+                          <th className="px-4 py-3 w-12 text-center">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-150 dark:divide-zinc-850">
+                        {manualOrder.items.length === 0 ? (
+                          <tr>
+                            <td colSpan="5" className="px-4 py-8 text-center text-gray-400 dark:text-zinc-500 italic text-xs">
+                              Belum ada produk ditambahkan
+                            </td>
+                          </tr>
+                        ) : manualOrder.items.map((item, index) => {
+                          const product = productsList.find(p => p.id === item.productId);
+                          const unitPrice = item.isCustom ? (parseFloat(item.customPrice) || 0) : (product ? product.price : 0);
+                          const subtotal = (parseInt(item.quantity) || 0) * unitPrice;
+                          
+                          return (
+                            <tr key={index} className="hover:bg-gray-50/50 dark:hover:bg-zinc-900/20 transition-colors">
+                              <td className="px-4 py-3 align-middle text-gray-900 dark:text-zinc-100 font-medium">
+                                {item.isCustom ? (
+                                  <div>
+                                    <span className="bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-500 text-[9px] px-1.5 py-0.5 rounded-md mr-2 font-bold uppercase">Kustom</span>
+                                    {item.customName}
+                                  </div>
+                                ) : (
+                                  product ? product.name : 'Produk tidak ditemukan'
+                                )}
+                              </td>
+                              
+                              <td className="px-4 py-3 align-middle text-center text-gray-900 dark:text-zinc-100 font-medium">
+                                {item.quantity}
+                              </td>
+                              
+                              <td className="px-4 py-3 align-middle text-right text-gray-900 dark:text-zinc-100 font-medium">
+                                Rp {Number(unitPrice).toLocaleString('id-ID')}
+                              </td>
+                              
+                              <td className="px-4 py-3 align-middle text-right">
+                                <div className="text-yellow-600 dark:text-yellow-500 font-bold">
+                                  Rp {Number(subtotal).toLocaleString('id-ID')}
+                                </div>
+                              </td>
+                              
+                              <td className="px-4 py-3 align-middle text-center whitespace-nowrap">
+                                <button type="button" onClick={() => handleOpenProductModal(index)} className="p-1.5 text-blue-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors inline-block mr-1">
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                                </button>
+                                <button type="button" onClick={() => handleRemoveItem(index)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors inline-block">
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                {manualOrderErrors.items && <p className="text-red-500 text-xs mt-1">{manualOrderErrors.items}</p>}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Harga Negosiasi (Opsional)</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={manualOrder.negotiatedPrice}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9.]/g, '');
+                      setManualOrder(prev => ({ ...prev, negotiatedPrice: val }));
+                    }}
+                    placeholder="Contoh: 150000"
+                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-xl text-gray-900 dark:text-zinc-100 text-sm focus:outline-none focus:border-yellow-600 focus:bg-white dark:focus:bg-zinc-950 transition-all"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">Kosongkan jika menggunakan harga normal produk.</p>
+                </div>
+                {manualOrder.status === 'processing' && (
+                  <div>
+                    <div className="flex flex-wrap justify-between items-center mb-2 gap-x-2 gap-y-1">
+                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Ongkos Kirim</label>
+                      <div className="flex items-center gap-1.5 cursor-pointer shrink-0" onClick={() => setAutoCalculateShipping(!autoCalculateShipping)}>
+                        <span className="text-[10px] font-bold text-gray-500 uppercase">Otomatis</span>
+                        <button
+                          type="button"
+                          className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none ${
+                            autoCalculateShipping ? 'bg-yellow-600 dark:bg-yellow-500' : 'bg-gray-300 dark:bg-zinc-700'
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                              autoCalculateShipping ? 'translate-x-[14px]' : 'translate-x-[2px]'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      disabled={autoCalculateShipping}
+                      value={manualOrder.shippingCost}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^0-9.]/g, '');
+                        setManualOrder(prev => ({ ...prev, shippingCost: val }));
+                      }}
+                      placeholder="0 (Opsional)"
+                      className={`w-full px-4 py-2.5 border rounded-xl text-gray-900 dark:text-zinc-100 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 transition-all ${
+                        autoCalculateShipping 
+                          ? 'bg-gray-100 dark:bg-zinc-900 text-gray-400 dark:text-zinc-500 border-gray-200 dark:border-zinc-800 cursor-not-allowed' 
+                          : 'bg-gray-50 dark:bg-zinc-950 border-gray-200 dark:border-zinc-800 focus:border-yellow-600'
+                      }`}
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="w-full h-px bg-gray-150 dark:border-zinc-800 my-4" />
+
+              {/* Alamat Lengkap Pas Kaya Checkout (Hanya jika status Diproses) */}
+              {manualOrder.status === 'processing' && (
               <div>
                 <h4 className="text-xs font-bold text-yellow-600 dark:text-yellow-500 uppercase tracking-wider mb-3">Alamat Pengiriman (Pas Checkout)</h4>
                 <div className="space-y-4 bg-gray-50/50 dark:bg-zinc-950/20 p-4 rounded-2xl border border-gray-150 dark:border-zinc-850">
@@ -863,6 +1056,7 @@ export default function OrdersList() {
                   </div>
                 </div>
               </div>
+              )}
 
               {/* Catatan Pesanan */}
               <div>
@@ -876,146 +1070,110 @@ export default function OrdersList() {
                 />
               </div>
 
-              <div className="w-full h-px bg-gray-150 dark:border-zinc-800 my-4" />
-
-              {/* Grid 2: Kategori & Produk & Jumlah */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              
+              {/* Mata Uang Selection */}
+              <div className="mt-6">
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Filter Kategori</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Mata Uang *</label>
                   <select
-                    value={selectedCategoryId}
-                    onChange={(e) => setSelectedCategoryId(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-xl text-gray-900 dark:text-zinc-100 text-sm focus:outline-none focus:border-yellow-600"
+                    value={selectedCurrency}
+                    onChange={(e) => setSelectedCurrency(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-xl text-gray-900 dark:text-zinc-100 text-sm focus:outline-none focus:border-yellow-600 transition-all"
                   >
-                    <option value="">Semua Kategori</option>
-                    {categoriesList.map(cat => (
-                      <option key={cat.id} value={cat.id}>{cat.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Pilih Produk *</label>
-                  <select
-                    value={manualOrder.productId}
-                    onChange={(e) => handleProductChange(e.target.value)}
-                    className={`w-full px-4 py-2.5 bg-gray-50 dark:bg-zinc-950 border rounded-xl text-gray-900 dark:text-zinc-100 text-sm focus:outline-none ${
-                      manualOrderErrors.productId ? 'border-red-300 dark:border-red-500/50' : 'border-gray-200 dark:border-zinc-800 focus:border-yellow-600 focus:ring-1 focus:ring-yellow-600/20'
-                    }`}
-                  >
-                    <option value="">-- Pilih Produk --</option>
-                    {filteredProducts.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} (Stok: {p.stock} | Rp {Number(p.price).toLocaleString('id-ID')})
-                      </option>
-                    ))}
-                  </select>
-                  {manualOrderErrors.productId && <p className="text-red-500 text-xs mt-1">{manualOrderErrors.productId}</p>}
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Kuantitas *</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={manualOrder.quantity}
-                    onChange={(e) => setManualOrder(prev => ({ ...prev, quantity: Math.max(1, parseInt(e.target.value) || 1) }))}
-                    className={`w-full px-4 py-2.5 bg-gray-50 dark:bg-zinc-950 border rounded-xl text-gray-900 dark:text-zinc-100 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 transition-all ${
-                      manualOrderErrors.quantity ? 'border-red-300 dark:border-red-500/50' : 'border-gray-200 dark:border-zinc-800 focus:border-yellow-600 focus:ring-1 focus:ring-yellow-600/20'
-                    }`}
-                  />
-                  {manualOrderErrors.quantity && <p className="text-red-500 text-xs mt-1">{manualOrderErrors.quantity}</p>}
-                </div>
-              </div>
-
-              {/* Grid 3: Harga Satuan, Ongkos Kirim, Status */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Harga Satuan (Rp) *</label>
-                    <button
-                      type="button"
-                      onClick={() => setUseOriginalPrice(!useOriginalPrice)}
-                      className={`text-[10px] px-2 py-0.5 rounded-md font-bold transition-all border ${
-                        useOriginalPrice 
-                          ? 'bg-green-500/10 text-green-500 border-green-500/20' 
-                          : 'bg-zinc-550/10 text-zinc-400 border-zinc-500/20'
-                      }`}
-                    >
-                      {useOriginalPrice ? 'Harga Asli: ON' : 'Harga Asli: OFF'}
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    disabled={useOriginalPrice}
-                    value={manualOrder.unitPrice}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/[^0-9.]/g, '');
-                      setManualOrder(prev => ({ ...prev, unitPrice: val }));
-                    }}
-                    placeholder="0"
-                    className={`w-full px-4 py-2.5 border rounded-xl text-gray-900 dark:text-zinc-100 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 transition-all ${
-                      useOriginalPrice 
-                        ? 'bg-gray-100 dark:bg-zinc-900 text-gray-400 dark:text-zinc-500 border-gray-200 dark:border-zinc-800 cursor-not-allowed' 
-                        : 'bg-gray-50 dark:bg-zinc-950 border-gray-200 dark:border-zinc-800 focus:border-yellow-600'
-                    }`}
-                  />
-                </div>
-
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Ongkos Kirim (Rp)</label>
-                    <button
-                      type="button"
-                      onClick={() => setAutoCalculateShipping(!autoCalculateShipping)}
-                      className={`text-[10px] px-2 py-0.5 rounded-md font-bold transition-all border ${
-                        autoCalculateShipping 
-                          ? 'bg-green-500/10 text-green-500 border-green-500/20' 
-                          : 'bg-zinc-550/10 text-zinc-400 border-zinc-500/20'
-                      }`}
-                    >
-                      {autoCalculateShipping ? 'Otomatis: ON' : 'Otomatis: OFF'}
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    disabled={autoCalculateShipping}
-                    value={manualOrder.shippingCost}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/[^0-9.]/g, '');
-                      setManualOrder(prev => ({ ...prev, shippingCost: val }));
-                    }}
-                    placeholder="0 (Opsional)"
-                    className={`w-full px-4 py-2.5 border rounded-xl text-gray-900 dark:text-zinc-100 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 transition-all ${
-                      autoCalculateShipping 
-                        ? 'bg-gray-100 dark:bg-zinc-900 text-gray-400 dark:text-zinc-500 border-gray-200 dark:border-zinc-800 cursor-not-allowed' 
-                        : 'bg-gray-50 dark:bg-zinc-950 border-gray-200 dark:border-zinc-800 focus:border-yellow-600'
-                    }`}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Status Pesanan *</label>
-                  <select
-                    value={manualOrder.status}
-                    onChange={(e) => setManualOrder(prev => ({ ...prev, status: e.target.value }))}
-                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-xl text-gray-900 dark:text-zinc-100 text-sm focus:outline-none"
-                  >
-                    <option value="processing">Diproses</option>
-                    <option value="delivered">Selesai</option>
+                    <option value="IDR">IDR (Rupiah)</option>
+                    <option value="MYR">MYR (Ringgit)</option>
+                    <option value="SGD">SGD (Sing. Dollar)</option>
+                    <option value="BND">BND (Brunei Dollar)</option>
+                    <option value="THB">THB (Baht)</option>
+                    <option value="PHP">PHP (Peso)</option>
+                    <option value="JPY">JPY (Yen)</option>
+                    <option value="CNY">CNY (Yuan)</option>
+                    <option value="EUR">EUR (Euro)</option>
+                    <option value="USD">USD (US Dollar)</option>
                   </select>
                 </div>
               </div>
 
               {/* Total Summary */}
-              <div className="bg-yellow-600/5 dark:bg-yellow-500/5 border border-yellow-600/10 dark:border-yellow-500/10 p-4 rounded-2xl flex justify-between items-center text-sm font-semibold mt-6">
-                <span className="text-gray-600 dark:text-zinc-400">Total Harga Pesanan:</span>
-                <span className="text-lg font-bold text-yellow-600 dark:text-yellow-500">
-                  Rp {Number((parseInt(manualOrder.quantity) || 0) * (parseFloat(manualOrder.unitPrice) || 0) + (parseFloat(manualOrder.shippingCost) || 0)).toLocaleString('id-ID')}
-                </span>
+
+              <div className="bg-white dark:bg-zinc-900 border border-gray-150 dark:border-zinc-850 p-5 rounded-2xl mt-6 space-y-3 shadow-sm">
+                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-150 dark:border-zinc-800 pb-3 mb-3">Rincian Pembayaran</h4>
+                
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500 dark:text-zinc-400">Subtotal Produk ({manualOrder.items.length} item)</span>
+                  <span className="font-medium text-gray-900 dark:text-zinc-200">
+                    Rp {Number(
+                      manualOrder.items.reduce((sum, item) => {
+                        const product = productsList.find(p => p.id === item.productId);
+                        const price = item.isCustom ? (parseFloat(item.customPrice) || 0) : (product ? product.price : 0);
+                        return sum + (parseInt(item.quantity) || 0) * price;
+                      }, 0)
+                    ).toLocaleString('id-ID')}
+                  </span>
+                </div>
+                
+                {manualOrder.status === 'processing' && (
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-gray-500 dark:text-zinc-400">Ongkos Kirim</span>
+                    <span className="font-medium text-gray-900 dark:text-zinc-200">
+                      + Rp {Number(parseFloat(manualOrder.shippingCost) || 0).toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                )}
+
+                {parseFloat(manualOrder.negotiatedPrice) >= 0 && (
+                  <div className="flex justify-between items-center text-sm text-yellow-600 dark:text-yellow-500">
+                    <span className="font-medium">Potongan Negosiasi</span>
+                    <span className="font-bold">
+                      - Rp {Number(
+                        manualOrder.items.reduce((sum, item) => {
+                          const product = productsList.find(p => p.id === item.productId);
+                          const price = item.isCustom ? (parseFloat(item.customPrice) || 0) : (product ? product.price : 0);
+                          return sum + (parseInt(item.quantity) || 0) * price;
+                        }, 0) - parseFloat(manualOrder.negotiatedPrice)
+                      ).toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                )}
+                
+                <div className="pt-3 mt-3 border-t border-gray-150 dark:border-zinc-800 flex justify-between items-center">
+                  <span className="text-sm font-bold text-gray-900 dark:text-white uppercase">Total Keseluruhan</span>
+                  
+                  <span className="text-xl font-black text-yellow-600 dark:text-yellow-500">
+                    Rp {Number(
+                      (parseFloat(manualOrder.negotiatedPrice) >= 0 
+                        ? parseFloat(manualOrder.negotiatedPrice) 
+                        : manualOrder.items.reduce((sum, item) => {
+                            const product = productsList.find(p => p.id === item.productId);
+                            const price = item.isCustom ? (parseFloat(item.customPrice) || 0) : (product ? product.price : 0);
+                            return sum + (parseInt(item.quantity) || 0) * price;
+                          }, 0)
+                      ) + (manualOrder.status === 'processing' ? (parseFloat(manualOrder.shippingCost) || 0) : 0)
+                    ).toLocaleString('id-ID')}
+                  </span>
+                </div>
+                
+                {selectedCurrency !== 'IDR' && (
+                  <div className="pt-3 mt-3 border-t border-dashed border-gray-200 dark:border-zinc-800 flex justify-between items-center">
+                    <span className="text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase">Nilai Konversi ({selectedCurrency})</span>
+                    <span className="text-lg font-bold text-gray-900 dark:text-white">
+                      {selectedCurrency} {Number(
+                        (
+                          (parseFloat(manualOrder.negotiatedPrice) >= 0 
+                            ? parseFloat(manualOrder.negotiatedPrice) 
+                            : manualOrder.items.reduce((sum, item) => {
+                                const product = productsList.find(p => p.id === item.productId);
+                                const price = item.isCustom ? (parseFloat(item.customPrice) || 0) : (product ? product.price : 0);
+                                return sum + (parseInt(item.quantity) || 0) * price;
+                              }, 0)
+                          ) + (manualOrder.status === 'processing' ? (parseFloat(manualOrder.shippingCost) || 0) : 0)
+                        ) * (exchangeRates[selectedCurrency] || 1)
+                      ).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                )}
               </div>
+  
 
               {/* Modal Buttons */}
               <div className="flex gap-3 justify-end pt-4 border-t border-gray-150 dark:border-zinc-800">
@@ -1036,6 +1194,146 @@ export default function OrdersList() {
               </div>
 
             </form>
+          </div>
+        </div>
+      )}
+
+      
+      {/* Product Add/Edit Modal */}
+      {productModal.isOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-200 dark:border-zinc-800 p-6 max-w-md w-full shadow-2xl animate-zoom-in relative">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 border-b border-gray-150 dark:border-zinc-800 pb-3">
+              {productModal.editIndex >= 0 ? 'Edit Produk' : 'Tambah Produk'}
+            </h3>
+            
+            <div className="space-y-4">
+              <div className="flex bg-gray-100 dark:bg-zinc-800 p-1 rounded-xl mb-4">
+                <button
+                  type="button"
+                  onClick={() => setProductModal(prev => ({ ...prev, item: { ...prev.item, isCustom: false, customName: '', customPrice: '' } }))}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${!productModal.item.isCustom ? 'bg-white dark:bg-zinc-900 text-yellow-600 dark:text-yellow-500 shadow-sm' : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-200'}`}
+                >
+                  Dari Katalog
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProductModal(prev => ({ ...prev, item: { ...prev.item, isCustom: true, productId: '' } }))}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${productModal.item.isCustom ? 'bg-white dark:bg-zinc-900 text-yellow-600 dark:text-yellow-500 shadow-sm' : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-200'}`}
+                >
+                  Input Manual
+                </button>
+              </div>
+
+              {!productModal.item.isCustom ? (
+                <>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <input 
+                        type="text" 
+                        placeholder="Cari produk..." 
+                        value={modalSearchQuery}
+                        onChange={(e) => setModalSearchQuery(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-xl text-gray-900 dark:text-zinc-100 text-xs focus:outline-none focus:border-yellow-600"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <select 
+                        value={modalCategoryId}
+                        onChange={(e) => setModalCategoryId(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-xl text-gray-900 dark:text-zinc-100 text-xs focus:outline-none focus:border-yellow-600"
+                      >
+                        <option value="">Semua Kategori</option>
+                        {categoriesList.map(cat => (
+                          <option key={cat.id} value={cat.id}>{cat.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Pilih Produk *</label>
+                    <select
+                      value={productModal.item.productId}
+                      onChange={(e) => setProductModal(prev => ({ ...prev, item: { ...prev.item, productId: e.target.value } }))}
+                      className={`w-full px-4 py-2.5 bg-gray-50 dark:bg-zinc-950 border rounded-xl text-gray-900 dark:text-zinc-100 text-sm focus:outline-none focus:border-yellow-600 ${productModal.errors?.productId ? 'border-red-300 dark:border-red-500/50' : 'border-gray-200 dark:border-zinc-800'}`}
+                    >
+                      <option value="">-- Pilih Produk --</option>
+                      {productsList
+                        .filter(p => (!modalCategoryId || p.category_id === modalCategoryId) && (!modalSearchQuery || p.name.toLowerCase().includes(modalSearchQuery.toLowerCase())))
+                        .map(p => (
+                        <option key={p.id} value={p.id}>{p.name} (Stok: {p.stock})</option>
+                      ))}
+                    </select>
+                    {productModal.errors?.productId && <p className="text-red-500 text-xs mt-1">{productModal.errors.productId}</p>}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Nama Produk Kustom *</label>
+                    <input
+                      type="text"
+                      value={productModal.item.customName}
+                      onChange={(e) => setProductModal(prev => ({ ...prev, item: { ...prev.item, customName: e.target.value } }))}
+                      placeholder="Contoh: BHS Eceran"
+                      className={`w-full px-4 py-2.5 bg-gray-50 dark:bg-zinc-950 border rounded-xl text-gray-900 dark:text-zinc-100 text-sm focus:outline-none focus:border-yellow-600 ${productModal.errors?.customName ? 'border-red-300 dark:border-red-500/50' : 'border-gray-200 dark:border-zinc-800'}`}
+                    />
+                    {productModal.errors?.customName && <p className="text-red-500 text-xs mt-1">{productModal.errors.customName}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Harga Satuan *</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-2.5 text-gray-400 text-sm">Rp</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={productModal.item.customPrice}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/[^0-9.]/g, '');
+                          setProductModal(prev => ({ ...prev, item: { ...prev.item, customPrice: val } }));
+                        }}
+                        className={`w-full pl-11 pr-4 py-2.5 bg-gray-50 dark:bg-zinc-950 border rounded-xl text-gray-900 dark:text-zinc-100 text-sm focus:outline-none focus:border-yellow-600 ${productModal.errors?.customPrice ? 'border-red-300 dark:border-red-500/50' : 'border-gray-200 dark:border-zinc-800'}`}
+                      />
+                    </div>
+                    {productModal.errors?.customPrice && <p className="text-red-500 text-xs mt-1">{productModal.errors.customPrice}</p>}
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Kuantitas *</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={productModal.item.quantity}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^0-9]/g, '').replace(/^0+/, '');
+                    setProductModal(prev => ({ ...prev, item: { ...prev.item, quantity: val } }));
+                  }}
+                  placeholder="Contoh: 1"
+                  className={`w-full px-4 py-2.5 bg-gray-50 dark:bg-zinc-950 border rounded-xl text-gray-900 dark:text-zinc-100 text-sm focus:outline-none focus:border-yellow-600 ${productModal.errors?.quantity ? 'border-red-300 dark:border-red-500/50' : 'border-gray-200 dark:border-zinc-800'}`}
+                />
+                {productModal.errors?.quantity && <p className="text-red-500 text-xs mt-1">{productModal.errors.quantity}</p>}
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6 pt-4 border-t border-gray-150 dark:border-zinc-800 justify-end">
+              <button
+                type="button"
+                onClick={() => setProductModal({ isOpen: false, editIndex: -1, item: { productId: '', quantity: '', isCustom: false, customName: '', customPrice: '' } })}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-300 transition-all"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveProductModal}
+                className="px-5 py-2 rounded-xl text-xs font-bold bg-yellow-600 hover:bg-yellow-700 text-white dark:bg-yellow-550 dark:hover:bg-yellow-600 dark:text-hitam transition-all"
+              >
+                Simpan
+              </button>
+            </div>
           </div>
         </div>
       )}
