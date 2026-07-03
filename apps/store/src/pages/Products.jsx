@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { ChevronLeft, SlidersHorizontal, X } from 'lucide-react';
+import { ChevronLeft, SlidersHorizontal, X, Truck } from 'lucide-react';
 import useCurrencyStore from '../store/useCurrencyStore';
 import { formatPrice } from '../utils/currencyHelper';
 import { useTranslation } from '../utils/translations';
@@ -279,16 +279,18 @@ export default function Products() {
                     ) : (
                       <div className="absolute inset-0 flex items-center justify-center text-gray-300 text-xs font-bold bg-gray-100">NO IMG</div>
                     )}
-                    {product.promo_type === 'flash_sale' && (
-                      <div className="absolute top-2 left-2 bg-red-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded shadow-sm z-10 tracking-wider">
-                        ⚡ {t('flash_sale')}
-                      </div>
-                    )}
-                    {product.promo_type === 'custom_promo' && (
-                      <div className="absolute top-2 left-2 bg-emerald-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded shadow-sm z-10 tracking-wider">
-                        ✨ {t('promo')}
-                      </div>
-                    )}
+                    <div className="absolute top-2 left-2 flex flex-col gap-1 z-10">
+                      {product.promo_type === 'flash_sale' && (
+                        <div className="bg-red-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded shadow-sm tracking-wider">
+                          ⚡ {t('flash_sale')}
+                        </div>
+                      )}
+                      {product.promo_type === 'custom_promo' && (
+                        <div className="bg-emerald-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded shadow-sm tracking-wider">
+                          ✨ {t('promo')}
+                        </div>
+                      )}
+                    </div>
                     {product.discount_percent > 0 && (
                       <div className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm z-10 animate-pulse">
                         -{product.discount_percent}%
@@ -323,6 +325,11 @@ export default function Products() {
                       )}
                       <div className="flex items-center justify-between text-[11px] text-zinc-500">
                         <div>{t('sold')} {soldCount}</div>
+                        {product.free_shipping !== false && (
+                          <span className="text-green-600 font-bold bg-green-50 px-1.5 py-0.5 rounded flex items-center gap-0.5 text-[9px] uppercase tracking-wider">
+                            <Truck size={10} /> {t('free_shipping')}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>

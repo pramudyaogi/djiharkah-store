@@ -133,11 +133,11 @@ export default function OrdersList() {
   
 
   // Calculate shipping cost automatically (only when address is saved)
-  const calculateManualShipping = (provinceName, prodId) => {
+  const calculateManualShipping = async (provinceName) => {
     if (!autoCalculateShipping) return;
 
-    if (!provinceName?.trim()) {
-      setManualOrder(prev => ({ ...prev, shippingCost: 0 }));
+    if (!provinceName?.trim() || manualOrder.items.length === 0) {
+      setManualOrder(prev => ({ ...prev, shippingCost: '0' }));
       return;
     }
 
@@ -152,8 +152,61 @@ export default function OrdersList() {
                        provinceName.toLowerCase().includes('papua') ||
                        provinceName.toLowerCase().includes('nusa');
 
-    const cost = isDomestic ? 15000 : 150000;
-    setManualOrder(prev => ({ ...prev, shippingCost: String(cost) }));
+    let baseShipping = isDomestic ? 15000 : 150000;
+
+    if (isDomestic) {
+      try {
+        const { data, error } = await supabase
+          .from('shipping_rates')
+          .select('cost')
+          .ilike('province', `%${provinceName.trim()}%`);
+          
+        if (!error && data && data.length > 0) {
+          baseShipping = parseFloat(data[0].cost);
+        }
+      } catch (err) {
+        console.error('Error fetching manual shipping rate:', err);
+      }
+    }
+
+    // Hitung total harga semua item dan item yang non-gratis ongkir
+    let totalSubtotal = 0;
+    let totalNonFreeSubtotal = 0;
+
+    manualOrder.items.forEach(item => {
+      let price = 0;
+      let isFree = false; // Custom product diasumsikan berbayar (tidak gratis ongkir)
+
+      if (item.isCustom) {
+        price = parseFloat(item.customPrice) || 0;
+      } else {
+        const product = productsList.find(p => p.id === item.productId);
+        if (product) {
+          price = product.price;
+          isFree = product.free_shipping !== false; // default true jika tidak false
+        }
+      }
+
+      const itemSubtotal = (parseInt(item.quantity) || 0) * price;
+      totalSubtotal += itemSubtotal;
+      
+      if (!isFree) {
+        totalNonFreeSubtotal += itemSubtotal;
+      }
+    });
+
+    if (totalSubtotal === 0) {
+      setManualOrder(prev => ({ ...prev, shippingCost: '0' }));
+      return;
+    }
+
+    // Hitung proporsi ongkir
+    const rawShippingCost = baseShipping * (totalNonFreeSubtotal / totalSubtotal);
+    
+    // Bulatkan ke kelipatan Rp 500 terdekat
+    const finalShippingCost = Math.round(rawShippingCost / 500) * 500;
+
+    setManualOrder(prev => ({ ...prev, shippingCost: String(finalShippingCost) }));
   };
 
   const handleSaveAddress = () => {

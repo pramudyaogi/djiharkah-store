@@ -51,28 +51,12 @@ function MapClickHandler({ setCoords }) {
 
 export default function Checkout() {
   const { currency, rates } = useCurrencyStore();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   
   const { cartItems, clearCart } = useCart();
   
-  // If cart is empty, redirect to home
-  useEffect(() => {
-    if (!cartItems || cartItems.length === 0) {
-      navigate('/');
-    }
-  }, [cartItems, navigate]);
-
-  const totalSubtotal = cartItems?.reduce((total, item) => {
-    return total + (item.promoQty * item.promoPrice) + (item.normalQty * item.normalPrice);
-  }, 0) || 0;
-  
-  const product = cartItems?.[0]?.product || {}; // For fallback properties like free_shipping check (simplified)
-
-  // If ANY item in the cart has free_shipping, the entire cart gets free shipping
-  const isCartFreeShipping = cartItems?.some(item => item.product.free_shipping !== false) || false;
-
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -84,6 +68,19 @@ export default function Checkout() {
   const [success, setSuccess] = useState(false);
   const [trackingCode, setTrackingCode] = useState('');
   const [copied, setCopied] = useState(false);
+
+  // If cart is empty and checkout is not successful, redirect to home
+  useEffect(() => {
+    if (!success && (!cartItems || cartItems.length === 0)) {
+      navigate('/');
+    }
+  }, [cartItems, success, navigate]);
+
+  const totalSubtotal = cartItems?.reduce((total, item) => {
+    return total + (item.promoQty * item.promoPrice) + (item.normalQty * item.normalPrice);
+  }, 0) || 0;
+  
+  const product = cartItems?.[0]?.product || {}; // For fallback properties like free_shipping check (simplified)
 
   const [selectedCountry, setSelectedCountry] = useState(countryCodesList[0]);
   const [localPhone, setLocalPhone] = useState('');
@@ -149,6 +146,8 @@ export default function Checkout() {
 
   // shipping calculation state
   const [shippingCost, setShippingCost] = useState(0);
+  const [baseShipping, setBaseShipping] = useState(0);
+  const [nonFreeSubtotal, setNonFreeSubtotal] = useState(0);
   const [addressDetails, setAddressDetails] = useState({
     street: '',
     subdistrict: '',
@@ -160,6 +159,102 @@ export default function Checkout() {
   const [tempAddress, setTempAddress] = useState({ ...addressDetails });
   const [addressErrors, setAddressErrors] = useState({});
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Cascading Address API States
+  const [apiProvinces, setApiProvinces] = useState([]);
+  const [apiRegencies, setApiRegencies] = useState([]);
+  const [apiDistricts, setApiDistricts] = useState([]);
+  const [loadingProvinces, setLoadingProvinces] = useState(false);
+  const [loadingRegencies, setLoadingRegencies] = useState(false);
+  const [loadingDistricts, setLoadingDistricts] = useState(false);
+
+  const toTitleCase = (str) => {
+    if (!str) return '';
+    return str.toLowerCase().split(' ').map(word => {
+      if (['dki', 'di', 'diy'].includes(word)) return word.toUpperCase();
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    }).join(' ');
+  };
+
+  // Load provinces from API on mount/modal open
+  useEffect(() => {
+    async function loadProvinces() {
+      try {
+        setLoadingProvinces(true);
+        const res = await fetch('https://www.emsifa.com/api-wilayah-indonesia/api/provinces.json');
+        if (!res.ok) throw new Error('Gagal mengambil data provinsi');
+        const data = await res.json();
+        setApiProvinces(data);
+      } catch (err) {
+        console.error('Error loading provinces:', err);
+      } finally {
+        setLoadingProvinces(false);
+      }
+    }
+    if (isModalOpen && apiProvinces.length === 0) {
+      loadProvinces();
+    }
+  }, [isModalOpen, apiProvinces.length]);
+
+  // Load regencies when province changes
+  useEffect(() => {
+    if (!tempAddress.province) {
+      setApiRegencies([]);
+      setApiDistricts([]);
+      return;
+    }
+    const matchedProv = apiProvinces.find(p => 
+      toTitleCase(p.name).toLowerCase() === tempAddress.province.toLowerCase()
+    );
+    if (matchedProv) {
+      async function loadRegencies() {
+        try {
+          setLoadingRegencies(true);
+          const res = await fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/regencies/${matchedProv.id}.json`);
+          if (!res.ok) throw new Error('Gagal mengambil data kota/kabupaten');
+          const data = await res.json();
+          setApiRegencies(data);
+        } catch (err) {
+          console.error('Error loading regencies:', err);
+        } finally {
+          setLoadingRegencies(false);
+        }
+      }
+      loadRegencies();
+    } else {
+      setApiRegencies([]);
+      setApiDistricts([]);
+    }
+  }, [tempAddress.province, apiProvinces]);
+
+  // Load districts when city changes
+  useEffect(() => {
+    if (!tempAddress.city) {
+      setApiDistricts([]);
+      return;
+    }
+    const matchedReg = apiRegencies.find(r => 
+      toTitleCase(r.name).toLowerCase() === tempAddress.city.toLowerCase()
+    );
+    if (matchedReg) {
+      async function loadDistricts() {
+        try {
+          setLoadingDistricts(true);
+          const res = await fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/districts/${matchedReg.id}.json`);
+          if (!res.ok) throw new Error('Gagal mengambil data kecamatan');
+          const data = await res.json();
+          setApiDistricts(data);
+        } catch (err) {
+          console.error('Error loading districts:', err);
+        } finally {
+          setLoadingDistricts(false);
+        }
+      }
+      loadDistricts();
+    } else {
+      setApiDistricts([]);
+    }
+  }, [tempAddress.city, apiRegencies]);
 
   // Leaflet Map Coordinates (Default: Jakarta Barat center)
   const [mapCoords, setMapCoords] = useState([-6.1683, 106.7588]);
@@ -180,13 +275,8 @@ export default function Checkout() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const calculateShipping = (provinceName) => {
+  const calculateShipping = async (provinceName) => {
     if (!provinceName) return;
-
-    if (isCartFreeShipping) {
-      setShippingCost(0);
-      return;
-    }
 
     const isDomestic = provinceName.toLowerCase().includes('indonesia') || 
                        provinceName.toLowerCase().includes('id') || 
@@ -199,11 +289,48 @@ export default function Checkout() {
                        provinceName.toLowerCase().includes('papua') ||
                        provinceName.toLowerCase().includes('nusa');
                        
+    let baseShipping = isDomestic ? 15000 : 150000;
+
     if (isDomestic) {
-      setShippingCost(15000); // Standard flat rate for Indonesia
-    } else {
-      setShippingCost(150000); // Flat rate for international shipping
+      try {
+        const { data, error } = await supabase
+          .from('shipping_rates')
+          .select('cost')
+          .ilike('province', `%${provinceName.trim()}%`);
+          
+        if (!error && data && data.length > 0) {
+          baseShipping = parseFloat(data[0].cost);
+        }
+      } catch (err) {
+        console.error('Error fetching shipping rate:', err);
+      }
     }
+
+    // Hitung subtotal produk non-gratis ongkir (free_shipping !== false artinya gratis, free_shipping === false artinya bayar)
+    const totalNonFreeSubtotal = cartItems?.reduce((total, item) => {
+      const isFree = item.product.free_shipping !== false;
+      if (!isFree) {
+        return total + (item.promoQty * item.promoPrice) + (item.normalQty * item.normalPrice);
+      }
+      return total;
+    }, 0) || 0;
+
+    if (totalSubtotal === 0) {
+      setShippingCost(0);
+      setBaseShipping(0);
+      setNonFreeSubtotal(0);
+      return;
+    }
+
+    // Hitung proporsi ongkir
+    const rawShippingCost = baseShipping * (totalNonFreeSubtotal / totalSubtotal);
+    
+    // Bulatkan ke kelipatan Rp 500 terdekat
+    const finalShippingCost = Math.round(rawShippingCost / 500) * 500;
+
+    setShippingCost(finalShippingCost);
+    setBaseShipping(baseShipping);
+    setNonFreeSubtotal(totalNonFreeSubtotal);
   };
 
   const handleAddressChange = (e) => {
@@ -261,7 +388,10 @@ export default function Checkout() {
   };
 
   const openAddressModal = () => {
-    setTempAddress({ ...addressDetails });
+    setTempAddress({
+      ...addressDetails,
+      countryName: addressDetails.country === 'Indonesia' ? '' : addressDetails.country
+    });
     setAddressErrors({});
     setIsModalOpen(true);
   };
@@ -271,8 +401,41 @@ export default function Checkout() {
     
     // Check validation of structured address
     const errors = {};
+    const isEn = language === 'EN';
+    if (tempAddress.country !== 'Indonesia') {
+      if (!tempAddress.countryName || !tempAddress.countryName.trim()) {
+        errors.countryName = isEn ? "Country name is required" : "Nama negara wajib diisi";
+      }
+      if (!tempAddress.street.trim()) {
+        errors.street = isEn ? "Full address is required" : "Alamat Lengkap wajib diisi";
+      }
+      if (Object.keys(errors).length > 0) {
+        setAddressErrors(errors);
+        return;
+      }
+      setAddressErrors({});
+
+      const updated = {
+        ...tempAddress,
+        country: tempAddress.countryName.trim(),
+        province: 'Luar Indonesia',
+        city: 'Luar Indonesia',
+        subdistrict: 'Luar Indonesia',
+        postalCode: ''
+      };
+
+      setAddressDetails(updated);
+      calculateShipping('Luar Indonesia');
+      setFormData(prev => ({ ...prev, address: `${updated.street.trim()}, ${updated.country.trim()}` }));
+      setIsModalOpen(false);
+      return;
+    }
+
     if (!tempAddress.street.trim()) {
       errors.street = t('street_required');
+    }
+    if (!tempAddress.subdistrict.trim()) {
+      errors.subdistrict = "Kecamatan wajib dipilih";
     }
     if (!tempAddress.city.trim()) {
       errors.city = t('city_required');
@@ -344,6 +507,7 @@ export default function Checkout() {
       if (rpcError) throw rpcError;
       setTrackingCode(orderData.tracking_code);
       setSuccess(true);
+      clearCart();
     } catch (err) {
       setError(err.message || t('failed_create_order'));
     } finally {
@@ -567,7 +731,7 @@ export default function Checkout() {
 
           {/* RIGHT: Order Summary */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 h-fit">
-            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-7">{t('order_summary')}</h3>
+            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-7">{t('payment_details')}</h3>
             <div className="max-h-60 overflow-y-auto pr-2 space-y-4 mb-6 pb-6 border-b border-gray-100">
               {cartItems?.map(item => {
                 const p = item.product;
@@ -610,16 +774,27 @@ export default function Checkout() {
             <div className="space-y-3 mb-6 text-sm">
               <div className="flex justify-between text-gray-500">
                 <span>{t('subtotal')}</span>
-                <span>{formatPrice(totalSubtotal, currency, rates)}</span>
+                <span className="font-semibold text-hitam">{formatPrice(totalSubtotal, currency, rates)}</span>
               </div>
-              <div className="flex justify-between text-gray-500">
-                <span>{t('shipping_cost')}</span>
-                {isCartFreeShipping ? (
-                  <span className="text-green-600 font-semibold">{t('free_shipping')}</span>
-                ) : shippingCost > 0 ? (
-                  <span className="font-semibold text-hitam">{formatPrice(shippingCost, currency, rates)}</span>
-                ) : (
-                  <span className="text-gray-400">{t('not_calculated')}</span>
+              <div className="space-y-1">
+                <div className="flex justify-between text-gray-500">
+                  <span>{t('shipping_cost')}</span>
+                  {!addressDetails.province ? (
+                    <span className="text-gray-400">{t('not_calculated')}</span>
+                  ) : shippingCost === 0 ? (
+                    <span className="text-green-600 font-semibold">{t('free_shipping')}</span>
+                  ) : (
+                    <span className="font-semibold text-hitam">{formatPrice(shippingCost, currency, rates)}</span>
+                  )}
+                </div>
+                {addressDetails.province && shippingCost > 0 && (
+                  <div className="text-[11px] text-gray-400 dark:text-zinc-500 text-right italic">
+                    {t('paid_proportion_subtext', { 
+                      province: addressDetails.province.trim(), 
+                      rate: formatPrice(baseShipping, currency, rates), 
+                      percent: ((nonFreeSubtotal / totalSubtotal) * 100).toFixed(1) 
+                    })}
+                  </div>
                 )}
               </div>
             </div>
@@ -644,7 +819,9 @@ export default function Checkout() {
       {/* MODAL POPUP FOR ADDRESS */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity duration-300">
-          <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[92vh] overflow-y-auto shadow-2xl flex flex-col transform transition-all scale-100 duration-300 border border-gray-100">
+          <div className={`bg-white rounded-3xl w-full max-h-[92vh] overflow-y-auto shadow-2xl flex flex-col transform transition-all scale-100 duration-300 border border-gray-100 transition-all duration-300 ${
+            tempAddress.country !== 'Indonesia' ? 'max-w-lg' : 'max-w-4xl'
+          }`}>
             
             {/* Modal Header */}
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100">
@@ -662,83 +839,196 @@ export default function Checkout() {
             </div>
 
             {/* Modal Body */}
-            <div className="p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className={`p-6 overflow-y-auto ${tempAddress.country !== 'Indonesia' ? 'max-w-md mx-auto w-full' : 'grid grid-cols-1 md:grid-cols-2 gap-6'}`}>
               
               {/* Form Fields */}
               <form onSubmit={saveAddressModal} noValidate className="space-y-4">
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('street_address_label')}</label>
-                  <textarea
-                    name="street" rows={2} value={tempAddress.street} onChange={handleAddressChange}
-                    placeholder={t('street_address_placeholder')}
-                    className={`w-full px-3 py-2 bg-gray-50 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-emas/20 transition-all placeholder:text-gray-300 resize-none ${
-                      addressErrors.street ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
-                    }`}
-                  />
-                  {addressErrors.street && (
-                    <p className="text-[11px] text-red-500 font-medium mt-1">{addressErrors.street}</p>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('subdistrict')}</label>
-                    <input
-                      type="text" name="subdistrict" value={tempAddress.subdistrict} onChange={handleAddressChange}
-                      placeholder={t('subdistrict')}
-                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:border-emas focus:ring-1 focus:ring-emas/20 transition-all"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('city')} *</label>
-                    <input
-                      type="text" name="city" value={tempAddress.city} onChange={handleAddressChange}
-                      placeholder={t('city')}
-                      className={`w-full px-3 py-2 bg-gray-50 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-emas/20 transition-all ${
-                        addressErrors.city ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
-                      }`}
-                    />
-                    {addressErrors.city && (
-                      <p className="text-[11px] text-red-500 font-medium mt-1">{addressErrors.city}</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('province')} *</label>
-                    <input
-                      type="text" name="province" value={tempAddress.province} onChange={handleAddressChange}
-                      placeholder={t('province')}
-                      className={`w-full px-3 py-2 bg-gray-50 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-emas/20 transition-all ${
-                        addressErrors.province ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
-                      }`}
-                    />
-                    {addressErrors.province && (
-                      <p className="text-[11px] text-red-500 font-medium mt-1">{addressErrors.province}</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('postal_code')}</label>
-                    <input
-                      type="text" name="postalCode" value={tempAddress.postalCode} onChange={handleAddressChange}
-                      placeholder={t('postal_code')}
-                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:border-emas focus:ring-1 focus:ring-emas/20 transition-all"
-                    />
-                  </div>
-                </div>
-
+                 {/* 1. Negara (Country) */}
                 <div>
                   <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('country')} *</label>
-                  <input
-                    type="text" name="country" value={tempAddress.country} onChange={handleAddressChange}
-                    placeholder={t('country')}
+                  <select
+                    name="country"
+                    value={tempAddress.country === 'Indonesia' ? 'Indonesia' : 'Luar Indonesia'}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTempAddress(prev => ({
+                        ...prev,
+                        country: val,
+                        province: val === 'Luar Indonesia' ? 'Luar Indonesia' : '',
+                        city: val === 'Luar Indonesia' ? 'Luar Indonesia' : '',
+                        subdistrict: val === 'Luar Indonesia' ? 'Luar Indonesia' : '',
+                        postalCode: '',
+                        street: '',
+                        countryName: ''
+                      }));
+                      setAddressErrors({});
+                    }}
                     className={`w-full px-3 py-2 bg-gray-50 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-emas/20 transition-all ${
                       addressErrors.country ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
                     }`}
-                  />
+                  >
+                    <option value="Indonesia">Indonesia</option>
+                    <option value="Luar Indonesia">{language === 'EN' ? 'Outside Indonesia' : 'Luar Indonesia'}</option>
+                  </select>
                   {addressErrors.country && (
                     <p className="text-[11px] text-red-500 font-medium mt-1">{addressErrors.country}</p>
+                  )}
+                </div>
+
+                {tempAddress.country !== 'Indonesia' && (
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                      {language === 'EN' ? 'Country Name *' : 'Nama Negara *'}
+                    </label>
+                    <input
+                      type="text"
+                      name="countryName"
+                      value={tempAddress.countryName || ''}
+                      onChange={handleAddressChange}
+                      placeholder={language === 'EN' ? 'e.g. Singapore, Malaysia...' : 'misal: Singapura, Malaysia...'}
+                      className={`w-full px-3 py-2 bg-gray-50 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-emas/20 transition-all ${
+                        addressErrors.countryName ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
+                      }`}
+                    />
+                    {addressErrors.countryName && (
+                      <p className="text-[11px] text-red-500 font-medium mt-1">{addressErrors.countryName}</p>
+                    )}
+                  </div>
+                )}
+
+                {tempAddress.country === 'Indonesia' && (
+                  <>
+                    {/* 2. Provinsi (Province) */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('province')} *</label>
+                      <select
+                        name="province"
+                        value={tempAddress.province}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setTempAddress(prev => ({
+                            ...prev,
+                            province: val,
+                            city: '',
+                            subdistrict: '',
+                            postalCode: '',
+                            street: ''
+                          }));
+                        }}
+                        className={`w-full px-3 py-2 bg-gray-50 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-emas/20 transition-all ${
+                          addressErrors.province ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
+                        }`}
+                        disabled={loadingProvinces}
+                      >
+                        <option value="">{loadingProvinces ? 'Memuat...' : '-- Pilih Provinsi --'}</option>
+                        {apiProvinces.map(p => (
+                          <option key={p.id} value={toTitleCase(p.name)}>{toTitleCase(p.name)}</option>
+                        ))}
+                      </select>
+                      {addressErrors.province && (
+                        <p className="text-[11px] text-red-500 font-medium mt-1">{addressErrors.province}</p>
+                      )}
+                    </div>
+
+                    {/* 3. Kota / Kabupaten (City) */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('city')} *</label>
+                      <select
+                        name="city"
+                        value={tempAddress.city}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setTempAddress(prev => ({
+                            ...prev,
+                            city: val,
+                            subdistrict: '',
+                            postalCode: '',
+                            street: ''
+                          }));
+                        }}
+                        className={`w-full px-3 py-2 bg-gray-50 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-emas/20 transition-all ${
+                          addressErrors.city ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
+                        }`}
+                        disabled={!tempAddress.province || loadingRegencies}
+                      >
+                        <option value="">{loadingRegencies ? 'Memuat...' : '-- Pilih Kota/Kabupaten --'}</option>
+                        {apiRegencies.map(r => (
+                          <option key={r.id} value={toTitleCase(r.name)}>{toTitleCase(r.name)}</option>
+                        ))}
+                      </select>
+                      {addressErrors.city && (
+                        <p className="text-[11px] text-red-500 font-medium mt-1">{addressErrors.city}</p>
+                      )}
+                    </div>
+
+                    {/* 4. Kecamatan & Kode Pos Grid */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('subdistrict')} *</label>
+                        <select
+                          name="subdistrict"
+                          value={tempAddress.subdistrict}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setTempAddress(prev => ({
+                              ...prev,
+                              subdistrict: val,
+                              postalCode: '',
+                              street: ''
+                            }));
+                          }}
+                          className={`w-full px-3 py-2 bg-gray-50 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-emas/20 transition-all ${
+                            addressErrors.subdistrict ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
+                          }`}
+                          disabled={!tempAddress.city || loadingDistricts}
+                        >
+                          <option value="">{loadingDistricts ? 'Memuat...' : '-- Pilih Kecamatan --'}</option>
+                          {apiDistricts.map(d => (
+                            <option key={d.id} value={toTitleCase(d.name)}>{toTitleCase(d.name)}</option>
+                          ))}
+                        </select>
+                        {addressErrors.subdistrict && (
+                          <p className="text-[11px] text-red-500 font-medium mt-1">{addressErrors.subdistrict}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('postal_code')}</label>
+                        <input
+                          type="text"
+                          name="postalCode"
+                          value={tempAddress.postalCode}
+                          onChange={handleAddressChange}
+                          placeholder={t('postal_code')}
+                          className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:border-emas focus:ring-1 focus:ring-emas/20 transition-all disabled:opacity-60"
+                          disabled={!tempAddress.subdistrict}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* 5. Jalan / Detail Alamat (Street) */}
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                    {tempAddress.country !== 'Indonesia' 
+                      ? (language === 'EN' ? 'Full Address (Outside Indonesia) *' : 'Alamat Lengkap (Luar Indonesia) *') 
+                      : t('street_address_label')}
+                  </label>
+                  <textarea
+                    name="street"
+                    rows={tempAddress.country !== 'Indonesia' ? 4 : 2}
+                    value={tempAddress.street}
+                    onChange={handleAddressChange}
+                    placeholder={tempAddress.country !== 'Indonesia' 
+                      ? (language === 'EN' ? 'Enter your full international address...' : 'Masukkan alamat lengkap luar negeri Anda...') 
+                      : t('street_address_placeholder')}
+                    className={`w-full px-3 py-2 bg-gray-50 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-emas/20 transition-all placeholder:text-gray-300 resize-none disabled:opacity-60 ${
+                      addressErrors.street ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
+                    }`}
+                    disabled={tempAddress.country === 'Indonesia' && !tempAddress.subdistrict}
+                  />
+                  {addressErrors.street && (
+                    <p className="text-[11px] text-red-500 font-medium mt-1">{addressErrors.street}</p>
                   )}
                 </div>
 
@@ -760,56 +1050,58 @@ export default function Checkout() {
               </form>
 
               {/* Map Section inside Modal */}
-              <div className="flex flex-col border border-gray-200 rounded-2xl overflow-hidden bg-gray-50/50">
-                <div className="px-4 py-2 bg-white border-b border-gray-100 flex items-center justify-between text-xs font-semibold text-gray-500">
-                  <div className="flex items-center gap-1.5">
-                    <MapPin size={14} className="text-emas" />
-                    <span>{t('shipping_location')}</span>
+              {tempAddress.country === 'Indonesia' && (
+                <div className="flex flex-col border border-gray-200 rounded-2xl overflow-hidden bg-gray-50/50">
+                  <div className="px-4 py-2 bg-white border-b border-gray-100 flex items-center justify-between text-xs font-semibold text-gray-500">
+                    <div className="flex items-center gap-1.5">
+                      <MapPin size={14} className="text-emas" />
+                      <span>{t('shipping_location')}</span>
+                    </div>
+                    {geocoding && (
+                      <div className="flex items-center gap-1 text-gray-400">
+                        <Loader2 size={11} className="animate-spin" />
+                        {t('searching_location')}
+                      </div>
+                    )}
                   </div>
-                  {geocoding && (
-                    <div className="flex items-center gap-1 text-gray-400">
-                      <Loader2 size={11} className="animate-spin" />
-                      {t('searching_location')}
+
+                  {geocodeError && (
+                    <div className="px-4 py-1.5 bg-amber-50 border-b border-amber-100">
+                      <p className="text-[10px] text-amber-600 font-medium">⚠️ {geocodeError}</p>
                     </div>
                   )}
-                </div>
 
-                {geocodeError && (
-                  <div className="px-4 py-1.5 bg-amber-50 border-b border-amber-100">
-                    <p className="text-[10px] text-amber-600 font-medium">⚠️ {geocodeError}</p>
-                  </div>
-                )}
-
-                <div className="flex-1 min-h-[220px] md:min-h-0 relative">
-                  <MapContainer
-                    center={mapCoords}
-                    zoom={13}
-                    style={{ height: '100%', width: '100%', minHeight: '260px' }}
-                    scrollWheelZoom={true}
-                  >
-                    <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    />
-                    <MapUpdater center={mapCoords} />
-                    <MapClickHandler setCoords={setMapCoords} />
-                    <Circle
+                  <div className="flex-1 min-h-[220px] md:min-h-0 relative">
+                    <MapContainer
                       center={mapCoords}
-                      radius={1200}
-                      pathOptions={{
-                        fillColor: '#d4a849',
-                        color: '#b8860b',
-                        weight: 2,
-                        fillOpacity: 0.35
-                      }}
-                    />
-                  </MapContainer>
-                </div>
+                      zoom={13}
+                      style={{ height: '100%', width: '100%', minHeight: '260px' }}
+                      scrollWheelZoom={true}
+                    >
+                      <TileLayer
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      />
+                      <MapUpdater center={mapCoords} />
+                      <MapClickHandler setCoords={setMapCoords} />
+                      <Circle
+                        center={mapCoords}
+                        radius={1200}
+                        pathOptions={{
+                          fillColor: '#d4a849',
+                          color: '#b8860b',
+                          weight: 2,
+                          fillOpacity: 0.35
+                        }}
+                      />
+                    </MapContainer>
+                  </div>
 
-                <div className="p-3 bg-white border-t border-gray-100 text-[10px] text-gray-400 leading-normal">
-                  {t('map_instruction')}
+                  <div className="p-3 bg-white border-t border-gray-100 text-[10px] text-gray-400 leading-normal">
+                    {t('map_instruction')}
+                  </div>
                 </div>
-              </div>
+              )}
 
             </div>
 

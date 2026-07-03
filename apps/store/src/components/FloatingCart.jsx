@@ -1,5 +1,6 @@
 import React from 'react';
 import { ShoppingBag } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 import { useTranslation } from '../utils/translations';
 import useCurrencyStore from '../store/useCurrencyStore';
@@ -9,8 +10,9 @@ export default function FloatingCart() {
   const { cartItems, cartTotalItems, setIsCartOpen } = useCart();
   const { currency, rates } = useCurrencyStore();
   const { t } = useTranslation();
+  const { pathname } = useLocation();
 
-  if (cartItems.length === 0) return null;
+  if (pathname === '/checkout' || cartItems.length === 0) return null;
 
   const totalSubtotal = cartItems.reduce((total, item) => {
     const promoSubtotal = item.promoQty * item.promoPrice;

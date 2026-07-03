@@ -536,30 +536,6 @@ export default function ProductForm() {
             </label>
           </div>
 
-          {/* Exclusive Choice Toggle */}
-          <div className="flex items-center justify-between p-4 bg-white dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-xl">
-            <div>
-              <div className="font-semibold text-gray-800 dark:text-zinc-200 flex items-center gap-2">
-                <span className="text-yellow-500">✨</span> Pilihan Eksklusif
-              </div>
-              <div className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">
-                {formData.is_exclusive ? 'Produk ini akan ditampilkan di section Pilihan Eksklusif halaman utama' : 'Produk biasa'}
-              </div>
-            </div>
-            <label className="flex items-center cursor-pointer">
-              <div className="relative">
-                <input
-                  type="checkbox"
-                  name="is_exclusive"
-                  checked={formData.is_exclusive}
-                  onChange={(e) => setFormData(prev => ({ ...prev, is_exclusive: e.target.checked }))}
-                  className="sr-only"
-                />
-                <div className={`block w-14 h-8 rounded-full transition-colors ${formData.is_exclusive ? 'bg-yellow-500' : 'bg-gray-300 dark:bg-zinc-700'}`}></div>
-                <div className={`absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform shadow ${formData.is_exclusive ? 'translate-x-6' : ''}`}></div>
-              </div>
-            </label>
-          </div>
         </div>
 
         {/* Upload Image */}
