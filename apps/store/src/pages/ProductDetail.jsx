@@ -4,11 +4,13 @@ import { supabase } from '../lib/supabase';
 import { Store, Star, Share2, Heart, ShieldCheck, ShoppingCart, User, AlertCircle, ChevronLeft, ChevronRight, X, MapPin } from 'lucide-react';
 import PopupModal from '../components/PopupModal';
 import useCurrencyStore from '../store/useCurrencyStore';
+import { useCart } from '../contexts/CartContext';
 import { formatPrice } from '../utils/currencyHelper';
 import { useTranslation } from '../utils/translations';
 
 export default function ProductDetail() {
   const { currency, rates } = useCurrencyStore();
+  const { addToCart } = useCart();
   const { t, language } = useTranslation();
   const { slug } = useParams();
   const navigate = useNavigate();
@@ -177,9 +179,23 @@ export default function ProductDetail() {
     }
   };
 
-  const handleBuyNow = () => {
+  const handleAddToCart = () => {
     const finalQuantity = quantity === '' ? 1 : quantity;
-    navigate('/checkout', { state: { product, quantity: finalQuantity } });
+    
+    // Calculate promo splits for cart
+    const isPromoActive = !!product.promo_type;
+    const promoStockAvailable = isPromoActive ? (product.original_stock || 0) : 0;
+    const pQty = isPromoActive ? Math.min(finalQuantity, promoStockAvailable) : 0;
+    const nQty = isPromoActive ? Math.max(0, finalQuantity - promoStockAvailable) : finalQuantity;
+    
+    addToCart(
+      product, 
+      finalQuantity, 
+      pQty, 
+      product.price, 
+      nQty, 
+      product.regular_price || product.price
+    );
   };
 
   const cleanPhoneForWhatsApp = (phoneStr) => {
@@ -388,11 +404,11 @@ export default function ProductDetail() {
 
           <div className="flex flex-col gap-3">
             <button 
-              onClick={handleBuyNow}
+              onClick={handleAddToCart}
               disabled={product.promo_type ? product.original_stock <= 0 : product.stock <= 0}
-              className="w-full bg-gradient-to-r from-emas to-yellow-400 text-hitam py-4 rounded-full font-bold text-lg hover:-translate-y-1 hover:shadow-[0_10px_20px_rgba(212,168,73,0.3)] transition-all duration-300 disabled:opacity-50 disabled:hover:translate-y-0"
+              className="w-full bg-gradient-to-r from-emas to-yellow-400 text-hitam py-4 rounded-full font-bold text-lg hover:-translate-y-1 hover:shadow-[0_10px_20px_rgba(212,168,73,0.3)] transition-all duration-300 disabled:opacity-50 disabled:hover:translate-y-0 flex items-center justify-center gap-2"
             >
-              {t('buy_now')}
+              <ShoppingCart size={20} /> Masukkan Keranjang
             </button>
             
             <button

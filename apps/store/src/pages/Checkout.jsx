@@ -3,6 +3,7 @@ import { useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Store, ChevronLeft, MapPin, Loader2, X, Check, Copy, ChevronDown, Search } from 'lucide-react';
 import useCurrencyStore from '../store/useCurrencyStore';
+import { useCart } from '../contexts/CartContext';
 import { formatPrice } from '../utils/currencyHelper';
 import { useTranslation } from '../utils/translations';
 import { MapContainer, TileLayer, Circle, useMap, useMapEvents } from 'react-leaflet';
@@ -53,21 +54,24 @@ export default function Checkout() {
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
-  const { product, quantity } = location.state || {};
-
-  // Hitung split pricing jika ada promo aktif dan kuantitas melebihi promo stock
-  const isPromoActive = !!product?.promo_type;
-  const promoStockAvailable = isPromoActive ? (product?.stock || 0) : 0;
   
-  const promoQty = isPromoActive ? Math.min(quantity, promoStockAvailable) : 0;
-  const normalQty = isPromoActive ? Math.max(0, quantity - promoStockAvailable) : quantity;
+  const { cartItems, clearCart } = useCart();
   
-  const promoPrice = product?.price || 0;
-  const normalPrice = isPromoActive ? (product?.regular_price || product?.price || 0) : (product?.price || 0);
+  // If cart is empty, redirect to home
+  useEffect(() => {
+    if (!cartItems || cartItems.length === 0) {
+      navigate('/');
+    }
+  }, [cartItems, navigate]);
 
-  const promoSubtotal = promoQty * promoPrice;
-  const normalSubtotal = normalQty * normalPrice;
-  const totalSubtotal = promoSubtotal + normalSubtotal;
+  const totalSubtotal = cartItems?.reduce((total, item) => {
+    return total + (item.promoQty * item.promoPrice) + (item.normalQty * item.normalPrice);
+  }, 0) || 0;
+  
+  const product = cartItems?.[0]?.product || {}; // For fallback properties like free_shipping check (simplified)
+
+  // If ANY item in the cart has free_shipping, the entire cart gets free shipping
+  const isCartFreeShipping = cartItems?.some(item => item.product.free_shipping !== false) || false;
 
   const [formData, setFormData] = useState({
     name: '',
@@ -165,10 +169,11 @@ export default function Checkout() {
   const geocodeTimerRef = useRef(null);
 
   useEffect(() => {
-    if (product && product.free_shipping !== false) {
-      setShippingCost(0);
+    // We still need to call this if we have address ready, but for now just a dummy update if cart changes
+    if (addressDetails.province) {
+      calculateShipping(addressDetails.province);
     }
-  }, [product]);
+  }, [cartItems]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -176,11 +181,13 @@ export default function Checkout() {
   };
 
   const calculateShipping = (provinceName) => {
-    if (product && product.free_shipping !== false) {
+    if (!provinceName) return;
+
+    if (isCartFreeShipping) {
       setShippingCost(0);
       return;
     }
-    if (!provinceName) return;
+
     const isDomestic = provinceName.toLowerCase().includes('indonesia') || 
                        provinceName.toLowerCase().includes('id') || 
                        provinceName.toLowerCase().includes('dki') || 
@@ -561,29 +568,44 @@ export default function Checkout() {
           {/* RIGHT: Order Summary */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 h-fit">
             <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-7">{t('order_summary')}</h3>
-            <div className="flex gap-4 mb-6 pb-6 border-b border-gray-100">
-              <div className="w-20 h-20 rounded-xl overflow-hidden shrink-0 border border-gray-100 bg-gray-50">
-                {product.image_url && <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />}
-              </div>
-              <div className="flex flex-col justify-center gap-1">
-                <p className="font-semibold text-hitam text-sm leading-snug">{product.name}</p>
-                {isPromoActive ? (
-                  <div className="space-y-1 text-xs">
-                    {promoQty > 0 && (
-                      <p className="text-red-500 font-medium">
-                        {promoQty} × {formatPrice(promoPrice, currency, rates)} ({t('promo_price_label')})
-                      </p>
-                    )}
-                    {normalQty > 0 && (
-                      <p className="text-gray-500">
-                        {normalQty} × {formatPrice(normalPrice, currency, rates)} ({t('normal_price_label')})
-                      </p>
-                    )}
+            <div className="max-h-60 overflow-y-auto pr-2 space-y-4 mb-6 pb-6 border-b border-gray-100">
+              {cartItems?.map(item => {
+                const p = item.product;
+                const imgUrl = p.images?.[0] || p.image_url;
+                const isPromoActive = !!p.promo_type;
+                return (
+                  <div key={p.id} className="border-b border-gray-50 pb-4 last:border-0 last:pb-0">
+                    <div className="flex gap-4 items-center">
+                      <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-50 border border-gray-100 shrink-0">
+                        {imgUrl ? (
+                          <img src={imgUrl} alt={p.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex justify-center items-center text-xs text-gray-300 font-medium">No Img</div>
+                        )}
+                      </div>
+                      <div className="flex-1 flex flex-col justify-center gap-1">
+                        <p className="font-semibold text-hitam text-sm leading-snug">{p.name}</p>
+                        {isPromoActive ? (
+                          <div className="space-y-1 text-xs mt-1">
+                            {item.promoQty > 0 && (
+                              <p className="text-red-500 font-medium">
+                                {item.promoQty} × {formatPrice(item.promoPrice, currency, rates)} ({t('promo_price_label')})
+                              </p>
+                            )}
+                            {item.normalQty > 0 && (
+                              <p className="text-gray-500">
+                                {item.normalQty} × {formatPrice(item.normalPrice, currency, rates)} ({t('normal_price_label')})
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-400 mt-1">{item.quantity} × {formatPrice(p.price, currency, rates)}</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                ) : (
-                  <p className="text-xs text-gray-400">{quantity} × {formatPrice(product.price, currency, rates)}</p>
-                )}
-              </div>
+                );
+              })}
             </div>
             <div className="space-y-3 mb-6 text-sm">
               <div className="flex justify-between text-gray-500">
@@ -592,7 +614,7 @@ export default function Checkout() {
               </div>
               <div className="flex justify-between text-gray-500">
                 <span>{t('shipping_cost')}</span>
-                {product.free_shipping !== false ? (
+                {isCartFreeShipping ? (
                   <span className="text-green-600 font-semibold">{t('free_shipping')}</span>
                 ) : shippingCost > 0 ? (
                   <span className="font-semibold text-hitam">{formatPrice(shippingCost, currency, rates)}</span>

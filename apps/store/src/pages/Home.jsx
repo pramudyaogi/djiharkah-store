@@ -543,10 +543,7 @@ export default function Home() {
                       </div>
                     </div>
                     <div className="flex items-center justify-between text-[11px] text-zinc-500">
-                      <div className="flex items-center gap-1">
-                        <span className="text-emas font-semibold">★</span>
-                        <span>{product.rating ? Number(product.rating).toFixed(1) : '5.0'}</span>
-                      </div>
+                      
                       <div>{t('sold')} {soldCount}</div>
                     </div>
                   </div>

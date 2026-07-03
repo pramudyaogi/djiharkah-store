@@ -2,7 +2,7 @@ const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 
 async function run() {
-  const envContent = fs.readFileSync('./apps/admin/.env.local', 'utf8');
+  const envContent = fs.readFileSync('./apps/admin/.env', 'utf8');
   const urlMatch = envContent.match(/VITE_SUPABASE_URL=(.*)/);
   const keyMatch = envContent.match(/VITE_SUPABASE_ANON_KEY=(.*)/);
   const serviceKeyMatch = envContent.match(/VITE_SUPABASE_SERVICE_ROLE_KEY=(.*)/);
@@ -12,7 +12,7 @@ async function run() {
     return;
   }
   const supabase = createClient(urlMatch[1].trim(), serviceKeyMatch ? serviceKeyMatch[1].trim() : keyMatch[1].trim());
-  const sql = fs.readFileSync('./supabase/migrations/00033_add_manual_order_rpc.sql', 'utf8');
+  const sql = fs.readFileSync('./supabase/migrations/00034_add_guest_multi_order.sql', 'utf8');
   console.log('Running SQL...');
   
   const p1 = await supabase.rpc('run_sql', { sql });

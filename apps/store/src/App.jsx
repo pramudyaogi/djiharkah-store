@@ -46,6 +46,9 @@ function AppRoutes() {
   );
 }
 
+import { CartProvider } from './contexts/CartContext';
+import FloatingCart from './components/FloatingCart';
+import CartDrawer from './components/CartDrawer';
 import useCurrencyStore from './store/useCurrencyStore';
 
 export default function App() {
@@ -56,9 +59,13 @@ export default function App() {
   }, [fetchRates]);
 
   return (
-    <BrowserRouter>
-      <ScrollToTop />
-      <AppRoutes />
-    </BrowserRouter>
+    <CartProvider>
+      <BrowserRouter>
+        <ScrollToTop />
+        <AppRoutes />
+        <FloatingCart />
+        <CartDrawer />
+      </BrowserRouter>
+    </CartProvider>
   );
 }
