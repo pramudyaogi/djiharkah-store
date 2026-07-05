@@ -365,7 +365,11 @@ export default function ProductDetail() {
                       <span className="bg-green-100 text-green-700 px-2 py-0.5 text-xs rounded-sm font-bold flex items-center gap-1">
                         <ShieldCheck size={12}/> {t('free_shipping')}
                       </span>
-                      <span className="text-gray-600">{t('shipping_to_your_city')}</span>
+                      <span className="text-gray-600">
+                        {product.free_shipping_type === 'jabodetabek' ? 'Jabodetabek' :
+                         product.free_shipping_type === 'indonesia' ? (language === 'EN' ? 'Indonesia-wide' : 'Se Indonesia') : 
+                         (language === 'EN' ? 'All Regions' : 'Semua Wilayah')}
+                      </span>
                     </>
                   ) : (
                     <span className="text-gray-600">{t('shipping_calculated_checkout')}</span>

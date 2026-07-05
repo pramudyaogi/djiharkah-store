@@ -25,17 +25,17 @@ const countryCodesList = [
 ];
 
 // Helper component: moves map view when coords change
-function MapUpdater({ center }) {
+function MapUpdater({ center, zoom }) {
   const map = useMap();
   useEffect(() => {
-    if (center) {
-      map.flyTo(center, 14, { animate: true, duration: 1.2 }); // Slightly lower zoom for radius view
+    if (center && zoom) {
+      map.flyTo(center, zoom, { animate: true, duration: 1.2 });
       // Invalidate size to prevent gray boxes inside modal
       setTimeout(() => {
         map.invalidateSize();
       }, 200);
     }
-  }, [center, map]);
+  }, [center, zoom, map]);
   return null;
 }
 
@@ -81,6 +81,7 @@ export default function Checkout() {
   }, 0) || 0;
   
   const product = cartItems?.[0]?.product || {}; // For fallback properties like free_shipping check (simplified)
+  const { quantity = 1, promoQty = 0, promoPrice = 0, normalQty = 0, normalPrice = 0 } = cartItems?.[0] || {};
 
   const [selectedCountry, setSelectedCountry] = useState(countryCodesList[0]);
   const [localPhone, setLocalPhone] = useState('');
@@ -256,26 +257,60 @@ export default function Checkout() {
     }
   }, [tempAddress.city, apiRegencies]);
 
-  // Leaflet Map Coordinates (Default: Jakarta Barat center)
-  const [mapCoords, setMapCoords] = useState([-6.1683, 106.7588]);
+  // Leaflet Map Coordinates (Default: Indonesia center)
+  const [mapCoords, setMapCoords] = useState([-0.7893, 113.9213]);
+  const [mapZoom, setMapZoom] = useState(4);
+  const [circleRadius, setCircleRadius] = useState(2500000); // Dynamic circle radius in meters
   const [geocoding, setGeocoding] = useState(false);
   const [geocodeError, setGeocodeError] = useState('');
   
   const geocodeTimerRef = useRef(null);
 
   useEffect(() => {
-    // We still need to call this if we have address ready, but for now just a dummy update if cart changes
     if (addressDetails.province) {
-      calculateShipping(addressDetails.province);
+      calculateShipping(addressDetails.province, addressDetails);
     }
-  }, [cartItems]);
+  }, [cartItems, addressDetails]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const calculateShipping = async (provinceName) => {
+  // Helper function to check if a product qualifies for free shipping based on customer address
+  const checkProductFreeShipping = (prod, address) => {
+    if (prod.free_shipping === false) return false;
+
+    const type = prod.free_shipping_type || 'all';
+
+    if (type === 'jabodetabek') {
+      const prov = (address.province || '').toLowerCase();
+      const city = (address.city || '').toLowerCase();
+      
+      const isJakarta = prov.includes('jakarta');
+      const isBogor = prov.includes('jawa barat') && city.includes('bogor');
+      const isDepok = prov.includes('jawa barat') && city.includes('depok');
+      const isBekasi = prov.includes('jawa barat') && city.includes('bekasi');
+      const isTangerang = prov.includes('banten') && (city.includes('tangerang') || city.includes('tanggerang'));
+      
+      return isJakarta || isBogor || isDepok || isBekasi || isTangerang;
+    }
+
+    if (type === 'indonesia') {
+      const prov = (address.province || '').toLowerCase();
+      const country = (address.country || '').toLowerCase();
+      
+      const isLuarIndo = prov.includes('luar indonesia') || 
+                         country.includes('luar indonesia') || 
+                         (country !== '' && !country.includes('indonesia'));
+      return !isLuarIndo;
+    }
+
+    // Default: 'all' (all regions free)
+    return true;
+  };
+
+  const calculateShipping = async (provinceName, addressInfo = addressDetails) => {
     if (!provinceName) return;
 
     const isDomestic = provinceName.toLowerCase().includes('indonesia') || 
@@ -306,9 +341,9 @@ export default function Checkout() {
       }
     }
 
-    // Hitung subtotal produk non-gratis ongkir (free_shipping !== false artinya gratis, free_shipping === false artinya bayar)
+    // Hitung subtotal produk non-gratis ongkir secara dinamis dengan mencocokkan tipe gratis ongkir dan alamat
     const totalNonFreeSubtotal = cartItems?.reduce((total, item) => {
-      const isFree = item.product.free_shipping !== false;
+      const isFree = checkProductFreeShipping(item.product, addressInfo);
       if (!isFree) {
         return total + (item.promoQty * item.promoPrice) + (item.normalQty * item.normalPrice);
       }
@@ -335,36 +370,80 @@ export default function Checkout() {
 
   const handleAddressChange = (e) => {
     const { name, value } = e.target;
-    setTempAddress(prev => {
-      const updated = { ...prev, [name]: value };
-      
-      // Clear geocode timer
+    setTempAddress(prev => ({ ...prev, [name]: value }));
+  };
+
+  // Automatically geocode the address and reposition the map when the customer changes province, city, subdistrict, or street address
+  useEffect(() => {
+    if (geocodeTimerRef.current) {
+      clearTimeout(geocodeTimerRef.current);
+    }
+
+    if (tempAddress.country === 'Luar Indonesia') {
+      return; // Do not geocode international addresses on map
+    }
+
+    // Determine target zoom level and circle radius based on the finest selection level
+    let targetZoom = 4;
+    let targetRadius = 2500000; // 2500 km for all of Indonesia
+
+    if (tempAddress.street && tempAddress.street.trim()) {
+      targetZoom = 15;
+      targetRadius = 1200; // 1.2 km for street address
+    } else if (tempAddress.subdistrict) {
+      targetZoom = 12;
+      targetRadius = 6000; // 6 km for subdistrict
+    } else if (tempAddress.city) {
+      targetZoom = 9;
+      targetRadius = 35000; // 35 km for city
+    } else if (tempAddress.province) {
+      targetZoom = 6; // Show full province (like Aceh, Jawa Barat)
+      targetRadius = 180000; // 180 km for province
+    }
+
+    // Build the query string from address parts
+    const queryParts = [];
+    if (tempAddress.street && tempAddress.street.trim()) {
+      queryParts.push(tempAddress.street.trim());
+    }
+    if (tempAddress.subdistrict) {
+      queryParts.push(tempAddress.subdistrict);
+    }
+    if (tempAddress.city) {
+      queryParts.push(tempAddress.city);
+    }
+    if (tempAddress.province) {
+      queryParts.push(tempAddress.province);
+    }
+    if (tempAddress.country && tempAddress.country !== 'Indonesia') {
+      queryParts.push(tempAddress.country);
+    } else {
+      queryParts.push('Indonesia');
+    }
+
+    const fullQuery = queryParts.join(', ');
+
+    // Only geocode if the query has sufficient length
+    if (fullQuery.trim().length > 6) {
+      geocodeTimerRef.current = setTimeout(() => {
+        geocodeAddress(fullQuery, targetZoom, targetRadius);
+      }, 1000); // 1 second debounce
+    }
+
+    return () => {
       if (geocodeTimerRef.current) {
         clearTimeout(geocodeTimerRef.current);
       }
-      
-      if (name === 'street') {
-        return updated;
-      }
-      
-      // Build address query (excluding exact street details for privacy/reliability)
-      const queryParts = [];
-      if (updated.subdistrict) queryParts.push(updated.subdistrict);
-      if (updated.city) queryParts.push(updated.city);
-      if (updated.province) queryParts.push(updated.province);
-      if (updated.country) queryParts.push(updated.country);
-      
-      const fullQuery = queryParts.join(', ');
-      
-      if (fullQuery.trim().length > 6) {
-        geocodeTimerRef.current = setTimeout(() => geocodeAddress(fullQuery), 1200);
-      }
-      
-      return updated;
-    });
-  };
+    };
+  }, [
+    tempAddress.street,
+    tempAddress.subdistrict,
+    tempAddress.city,
+    tempAddress.province,
+    tempAddress.country
+  ]);
 
-  const geocodeAddress = async (queryAddress) => {
+  const geocodeAddress = async (queryAddress, targetZoom, targetRadius) => {
     setGeocoding(true);
     setGeocodeError('');
     try {
@@ -377,6 +456,8 @@ export default function Checkout() {
       if (data && data.length > 0) {
         const { lat, lon } = data[0];
         setMapCoords([parseFloat(lat), parseFloat(lon)]);
+        setMapZoom(targetZoom);
+        setCircleRadius(targetRadius);
       } else {
         setGeocodeError(t('geocode_error'));
       }
@@ -388,11 +469,23 @@ export default function Checkout() {
   };
 
   const openAddressModal = () => {
-    setTempAddress({
+    const targetAddress = {
       ...addressDetails,
       countryName: addressDetails.country === 'Indonesia' ? '' : addressDetails.country
-    });
+    };
+    setTempAddress(targetAddress);
     setAddressErrors({});
+    
+    // Set initial map position based on whether they have a saved address
+    if (addressDetails.province && addressDetails.province !== 'Luar Indonesia') {
+      // It will trigger the useEffect geocoding automatically because tempAddress changes
+    } else {
+      // Show entire Indonesia initially
+      setMapCoords([-0.7893, 113.9213]);
+      setMapZoom(4);
+      setCircleRadius(2500000); // 2500 km for all of Indonesia
+    }
+    
     setIsModalOpen(true);
   };
 
@@ -425,7 +518,7 @@ export default function Checkout() {
       };
 
       setAddressDetails(updated);
-      calculateShipping('Luar Indonesia');
+      calculateShipping('Luar Indonesia', updated);
       setFormData(prev => ({ ...prev, address: `${updated.street.trim()}, ${updated.country.trim()}` }));
       setIsModalOpen(false);
       return;
@@ -457,7 +550,7 @@ export default function Checkout() {
     setAddressDetails(tempAddress);
     
     // Calculate shipping cost
-    calculateShipping(tempAddress.province);
+    calculateShipping(tempAddress.province, tempAddress);
     
     // Concatenate address string
     const parts = [
@@ -1074,7 +1167,7 @@ export default function Checkout() {
                   <div className="flex-1 min-h-[220px] md:min-h-0 relative">
                     <MapContainer
                       center={mapCoords}
-                      zoom={13}
+                      zoom={mapZoom}
                       style={{ height: '100%', width: '100%', minHeight: '260px' }}
                       scrollWheelZoom={true}
                     >
@@ -1082,11 +1175,11 @@ export default function Checkout() {
                         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                       />
-                      <MapUpdater center={mapCoords} />
+                      <MapUpdater center={mapCoords} zoom={mapZoom} />
                       <MapClickHandler setCoords={setMapCoords} />
-                      <Circle
+                       <Circle
                         center={mapCoords}
-                        radius={1200}
+                        radius={circleRadius}
                         pathOptions={{
                           fillColor: '#d4a849',
                           color: '#b8860b',

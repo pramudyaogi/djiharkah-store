@@ -28,6 +28,7 @@ export default function ProductForm() {
     description: '',
     is_active: true,
     free_shipping: true,
+    free_shipping_type: 'all',
     is_exclusive: false,
   });
 
@@ -68,6 +69,7 @@ export default function ProductForm() {
             description: product.description || '',
             is_active: product.is_active,
             free_shipping: product.free_shipping ?? true,
+            free_shipping_type: product.free_shipping_type || 'all',
             is_exclusive: product.is_exclusive ?? false,
           });
           
@@ -356,6 +358,7 @@ export default function ProductForm() {
         description: formData.description,
         is_active: formData.is_active,
         free_shipping: formData.free_shipping,
+        free_shipping_type: formData.free_shipping ? (formData.free_shipping_type || 'all') : null,
         is_exclusive: formData.is_exclusive,
         image_url: firstImageUrl,
         images: finalImageUrls
@@ -512,28 +515,48 @@ export default function ProductForm() {
           </div>
 
           {/* Gratis Ongkir Toggle */}
-          <div className="flex items-center justify-between p-4 bg-white dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-xl">
-            <div>
-              <div className="font-semibold text-gray-800 dark:text-zinc-200 flex items-center gap-2">
-                <span className="text-green-500">🚚</span> Gratis Ongkir
+          <div className="space-y-3 p-4 bg-white dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-semibold text-gray-800 dark:text-zinc-200 flex items-center gap-2">
+                  <span className="text-green-500">🚚</span> Gratis Ongkir
+                </div>
+                <div className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">
+                  {formData.free_shipping ? 'Produk ini gratis ongkir untuk pembeli' : 'Produk ini tidak gratis ongkir'}
+                </div>
               </div>
-              <div className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">
-                {formData.free_shipping ? 'Produk ini gratis ongkir untuk pembeli' : 'Produk ini tidak gratis ongkir'}
-              </div>
+              <label className="flex items-center cursor-pointer">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    name="free_shipping"
+                    checked={formData.free_shipping}
+                    onChange={handleInputChange}
+                    className="sr-only"
+                  />
+                  <div className={`block w-14 h-8 rounded-full transition-colors ${formData.free_shipping ? 'bg-green-500' : 'bg-gray-300 dark:bg-zinc-700'}`}></div>
+                  <div className={`absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform shadow ${formData.free_shipping ? 'translate-x-6' : ''}`}></div>
+                </div>
+              </label>
             </div>
-            <label className="flex items-center cursor-pointer">
-              <div className="relative">
-                <input
-                  type="checkbox"
-                  name="free_shipping"
-                  checked={formData.free_shipping}
+
+            {formData.free_shipping && (
+              <div className="pt-3 border-t border-gray-100 dark:border-zinc-800 space-y-1.5 animate-fadeIn">
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-zinc-400">
+                  Kategori Wilayah Gratis Ongkir
+                </label>
+                <select
+                  name="free_shipping_type"
+                  value={formData.free_shipping_type || 'all'}
                   onChange={handleInputChange}
-                  className="sr-only"
-                />
-                <div className={`block w-14 h-8 rounded-full transition-colors ${formData.free_shipping ? 'bg-green-500' : 'bg-gray-300 dark:bg-zinc-700'}`}></div>
-                <div className={`absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform shadow ${formData.free_shipping ? 'translate-x-6' : ''}`}></div>
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-lg text-sm text-gray-700 dark:text-zinc-300 focus:outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/20 transition-all cursor-pointer"
+                >
+                  <option value="jabodetabek">Jabodetabek (Jakarta, Bogor, Depok, Tangerang, Bekasi)</option>
+                  <option value="indonesia">Gratis Ongkir Se-Indonesia</option>
+                  <option value="all">Gratis Ongkir Semua Wilayah (Global)</option>
+                </select>
               </div>
-            </label>
+            )}
           </div>
 
         </div>
