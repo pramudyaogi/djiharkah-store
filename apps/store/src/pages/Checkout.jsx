@@ -979,56 +979,90 @@ export default function Checkout() {
                  {/* 1. Negara (Country) */}
                 <div>
                   <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('country')} *</label>
-                  <select
-                    name="countryMode"
-                    value={tempAddress.countryMode || 'Indonesia'}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setTempAddress(prev => ({
-                        ...prev,
-                        countryMode: val,
-                        country: val === 'Indonesia' ? 'Indonesia' : '',
-                        province: '',
-                        city: '',
-                        subdistrict: '',
-                        postalCode: '',
-                        street: '',
-                        countryName: ''
-                      }));
-                      setAddressErrors({});
-                    }}
-                    className={`w-full px-3 py-2 bg-gray-50 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-emas/20 transition-all ${
-                      addressErrors.country ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
-                    }`}
-                  >
-                    <option value="Indonesia">Indonesia</option>
-                    <option value="manual">{t('enter_country_manually')}</option>
-                  </select>
-                </div>
-
-                {tempAddress.countryMode === 'manual' && (
-                  <div>
-                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-                      {t('country_name_label')} *
-                    </label>
-                    <input
-                      type="text"
-                      name="countryName"
-                      value={tempAddress.countryName || ''}
+                  {tempAddress.countryMode === 'Indonesia' ? (
+                    <select
+                      name="countryMode"
+                      value="Indonesia"
                       onChange={(e) => {
                         const val = e.target.value;
-                        setTempAddress(prev => ({ ...prev, countryName: val }));
+                        if (val === 'cari') {
+                          setTempAddress(prev => ({
+                            ...prev,
+                            countryMode: 'manual',
+                            country: '',
+                            countryName: '',
+                            province: '',
+                            city: '',
+                            subdistrict: '',
+                            postalCode: '',
+                            street: ''
+                          }));
+                        }
+                        setAddressErrors({});
                       }}
-                      placeholder={t('country_name_placeholder')}
                       className={`w-full px-3 py-2 bg-gray-50 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-emas/20 transition-all ${
-                        addressErrors.countryName ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
+                        addressErrors.country ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
                       }`}
-                    />
-                    {addressErrors.countryName && (
-                      <p className="text-[11px] text-red-500 font-medium mt-1">{addressErrors.countryName}</p>
-                    )}
-                  </div>
-                )}
+                    >
+                      <option value="Indonesia">Indonesia</option>
+                      <option value="cari">{t('search_country') || 'Cari Negara...'}</option>
+                    </select>
+                  ) : (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        name="countryName"
+                        autoFocus
+                        value={tempAddress.countryName || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val.trim().toLowerCase() === 'indonesia') {
+                            setTempAddress(prev => ({
+                              ...prev,
+                              countryMode: 'Indonesia',
+                              country: 'Indonesia',
+                              countryName: '',
+                              province: '',
+                              city: '',
+                              subdistrict: '',
+                              postalCode: '',
+                              street: ''
+                            }));
+                          } else {
+                            setTempAddress(prev => ({ ...prev, countryName: val }));
+                          }
+                          setAddressErrors({});
+                        }}
+                        placeholder={t('country_name_placeholder') || 'Ketik nama negara...'}
+                        className={`w-full px-3 py-2 pr-10 bg-gray-50 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-emas/20 transition-all ${
+                          addressErrors.countryName ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTempAddress(prev => ({
+                            ...prev,
+                            countryMode: 'Indonesia',
+                            country: 'Indonesia',
+                            countryName: '',
+                            province: '', city: '', subdistrict: '', postalCode: '', street: ''
+                          }));
+                          setAddressErrors({});
+                        }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  )}
+                  {addressErrors.countryName && tempAddress.countryMode === 'manual' && (
+                    <p className="text-[11px] text-red-500 font-medium mt-1">{addressErrors.countryName}</p>
+                  )}
+                  {addressErrors.country && tempAddress.countryMode === 'Indonesia' && (
+                    <p className="text-[11px] text-red-500 font-medium mt-1">{addressErrors.country}</p>
+                  )}
+                </div>
 
                 {tempAddress.countryMode !== 'manual' && (
                   <>
@@ -1054,7 +1088,7 @@ export default function Checkout() {
                         }`}
                         disabled={loadingProvinces}
                       >
-                        <option value="">{loadingProvinces ? 'Memuat...' : '-- Pilih Provinsi --'}</option>
+                        <option value="">{loadingProvinces ? t('loading') : t('select_province_placeholder')}</option>
                         {apiProvinces.map(p => (
                           <option key={p.id} value={toTitleCase(p.name)}>{toTitleCase(p.name)}</option>
                         ))}
@@ -1085,7 +1119,7 @@ export default function Checkout() {
                         }`}
                         disabled={!tempAddress.province || loadingRegencies}
                       >
-                        <option value="">{loadingRegencies ? 'Memuat...' : '-- Pilih Kota/Kabupaten --'}</option>
+                        <option value="">{loadingRegencies ? t('loading') : t('select_city_placeholder')}</option>
                         {apiRegencies.map(r => (
                           <option key={r.id} value={toTitleCase(r.name)}>{toTitleCase(r.name)}</option>
                         ))}
@@ -1116,7 +1150,7 @@ export default function Checkout() {
                           }`}
                           disabled={!tempAddress.city || loadingDistricts}
                         >
-                          <option value="">{loadingDistricts ? 'Memuat...' : '-- Pilih Kecamatan --'}</option>
+                          <option value="">{loadingDistricts ? t('loading') : t('select_subdistrict_placeholder')}</option>
                           {apiDistricts.map(d => (
                             <option key={d.id} value={toTitleCase(d.name)}>{toTitleCase(d.name)}</option>
                           ))}

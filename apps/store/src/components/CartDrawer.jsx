@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { X, ShoppingBag, Trash2, ShieldCheck, Clock } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { useTranslation } from '../utils/translations';
@@ -12,7 +12,11 @@ export default function CartDrawer() {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
-  if (!isCartOpen) return null;
+  useEffect(() => {
+    if (isCartOpen && cartItems.length === 0) {
+      setIsCartOpen(false);
+    }
+  }, [cartItems.length, isCartOpen, setIsCartOpen]);
 
   const totalSubtotal = cartItems.reduce((total, item) => {
     const promoSubtotal = item.promoQty * item.promoPrice;
@@ -28,10 +32,10 @@ export default function CartDrawer() {
   return (
     <>
       <div 
-        className="fixed inset-0 bg-black/60 z-[90] backdrop-blur-sm transition-opacity"
+        className={`fixed inset-0 bg-black/60 z-[90] backdrop-blur-sm transition-opacity duration-300 ${isCartOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         onClick={() => setIsCartOpen(false)}
       />
-      <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white z-[100] shadow-2xl flex flex-col transform transition-transform duration-300">
+      <div className={`fixed inset-y-0 right-0 w-full max-w-md bg-white z-[100] shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out ${isCartOpen ? 'translate-x-0' : 'translate-x-full'}`}>
         
         {/* Header */}
         <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-white">
