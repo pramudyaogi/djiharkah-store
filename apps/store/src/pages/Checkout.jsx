@@ -383,22 +383,25 @@ export default function Checkout() {
       return; // Do not geocode international addresses on map
     }
 
+    // Clear any previous geocode error instantly when input changes
+    setGeocodeError('');
+
     // Determine target zoom level and circle radius based on the finest selection level
     let targetZoom = 4;
     let targetRadius = 2500000; // 2500 km for all of Indonesia
 
     if (tempAddress.street && tempAddress.street.trim()) {
       targetZoom = 15;
-      targetRadius = 1200; // 1.2 km for street address
+      targetRadius = 1000; // 1 km for street address
     } else if (tempAddress.subdistrict) {
-      targetZoom = 12;
-      targetRadius = 6000; // 6 km for subdistrict
+      targetZoom = 13;
+      targetRadius = 2500; // 2.5 km for subdistrict
     } else if (tempAddress.city) {
-      targetZoom = 9;
-      targetRadius = 35000; // 35 km for city
+      targetZoom = 11;
+      targetRadius = 12000; // 12 km for city
     } else if (tempAddress.province) {
-      targetZoom = 6; // Show full province (like Aceh, Jawa Barat)
-      targetRadius = 180000; // 180 km for province
+      targetZoom = 8;
+      targetRadius = 50000; // 50 km for province (covers small provinces like DKI Jakarta perfectly)
     }
 
     // Build the query string from address parts
@@ -426,7 +429,8 @@ export default function Checkout() {
     // Only geocode if the query has sufficient length
     if (fullQuery.trim().length > 6) {
       geocodeTimerRef.current = setTimeout(() => {
-        geocodeAddress(fullQuery, targetZoom, targetRadius);
+        const isStreet = !!(tempAddress.street && tempAddress.street.trim());
+        geocodeAddress(fullQuery, targetZoom, targetRadius, isStreet);
       }, 1000); // 1 second debounce
     }
 
@@ -443,9 +447,11 @@ export default function Checkout() {
     tempAddress.country
   ]);
 
-  const geocodeAddress = async (queryAddress, targetZoom, targetRadius) => {
+  const geocodeAddress = async (queryAddress, targetZoom, targetRadius, isStreet) => {
     setGeocoding(true);
-    setGeocodeError('');
+    if (!isStreet) {
+      setGeocodeError('');
+    }
     try {
       const query = encodeURIComponent(queryAddress);
       const res = await fetch(
@@ -458,11 +464,17 @@ export default function Checkout() {
         setMapCoords([parseFloat(lat), parseFloat(lon)]);
         setMapZoom(targetZoom);
         setCircleRadius(targetRadius);
+        setGeocodeError('');
       } else {
-        setGeocodeError(t('geocode_error'));
+        // Suppress warning/error notification entirely for street/detail address typing
+        if (!isStreet) {
+          setGeocodeError(t('geocode_error'));
+        }
       }
     } catch {
-      setGeocodeError(t('geocode_load_error'));
+      if (!isStreet) {
+        setGeocodeError(t('geocode_load_error'));
+      }
     } finally {
       setGeocoding(false);
     }
