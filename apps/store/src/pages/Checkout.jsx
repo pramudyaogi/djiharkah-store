@@ -313,6 +313,26 @@ export default function Checkout() {
   const calculateShipping = async (provinceName, addressInfo = addressDetails) => {
     if (!provinceName) return;
 
+    const country = (addressInfo.country || '').toLowerCase();
+    const isInternational = addressInfo.country === 'Luar Indonesia' || 
+                            (addressInfo.country && country !== 'indonesia');
+
+    // Calculate subtotal of non-free shipping products first
+    const totalNonFreeSubtotal = cartItems?.reduce((total, item) => {
+      const isFree = checkProductFreeShipping(item.product, addressInfo);
+      if (!isFree) {
+        return total + (item.promoQty * item.promoPrice) + (item.normalQty * item.normalPrice);
+      }
+      return total;
+    }, 0) || 0;
+
+    if (isInternational) {
+      setShippingCost(0);
+      setBaseShipping(0);
+      setNonFreeSubtotal(totalNonFreeSubtotal);
+      return;
+    }
+
     const isDomestic = provinceName.toLowerCase().includes('indonesia') || 
                        provinceName.toLowerCase().includes('id') || 
                        provinceName.toLowerCase().includes('dki') || 
@@ -340,15 +360,6 @@ export default function Checkout() {
         console.error('Error fetching shipping rate:', err);
       }
     }
-
-    // Hitung subtotal produk non-gratis ongkir secara dinamis dengan mencocokkan tipe gratis ongkir dan alamat
-    const totalNonFreeSubtotal = cartItems?.reduce((total, item) => {
-      const isFree = checkProductFreeShipping(item.product, addressInfo);
-      if (!isFree) {
-        return total + (item.promoQty * item.promoPrice) + (item.normalQty * item.normalPrice);
-      }
-      return total;
-    }, 0) || 0;
 
     if (totalSubtotal === 0) {
       setShippingCost(0);
@@ -391,17 +402,17 @@ export default function Checkout() {
     let targetRadius = 2500000; // 2500 km for all of Indonesia
 
     if (tempAddress.street && tempAddress.street.trim()) {
-      targetZoom = 15;
-      targetRadius = 1000; // 1 km for street address
+      targetZoom = 16;
+      targetRadius = 400; // 400 meters for street address
     } else if (tempAddress.subdistrict) {
-      targetZoom = 13;
-      targetRadius = 2500; // 2.5 km for subdistrict
+      targetZoom = 14;
+      targetRadius = 1500; // 1.5 km for subdistrict
     } else if (tempAddress.city) {
-      targetZoom = 11;
-      targetRadius = 12000; // 12 km for city
+      targetZoom = 12;
+      targetRadius = 6000; // 6 km for city
     } else if (tempAddress.province) {
-      targetZoom = 8;
-      targetRadius = 50000; // 50 km for province (covers small provinces like DKI Jakarta perfectly)
+      targetZoom = 9;
+      targetRadius = 25000; // 25 km for province (covers small provinces like DKI Jakarta perfectly)
     }
 
     // Build the query string from address parts
@@ -589,6 +600,19 @@ export default function Checkout() {
     if (!formData.address.trim()) errors.address = t('address_required');
     if (Object.keys(errors).length > 0) { setValidationErrors(errors); return; }
 
+    const country = (addressDetails.country || '').toLowerCase();
+    const isInternational = addressDetails.country === 'Luar Indonesia' || 
+                            (addressDetails.country && country !== 'indonesia');
+    const isShippingCOD = isInternational && nonFreeSubtotal > 0;
+
+    const finalAddressStr = isShippingCOD 
+      ? `[ONGKIR BAYAR DI TEMPAT]\n${formData.address}`
+      : formData.address;
+
+    const fullAddressWithNotes = notes.trim() 
+      ? `${finalAddressStr}\n\nCatatan: ${notes.trim()}` 
+      : finalAddressStr;
+
     setValidationErrors({});
     setLoading(true);
     setError('');
@@ -599,7 +623,7 @@ export default function Checkout() {
         p_name: formData.name,
         p_phone: formData.phone,
         p_email: '', // Removed email field from UI
-        p_address: notes.trim() ? `${formData.address}\n\nCatatan: ${notes.trim()}` : formData.address,
+        p_address: fullAddressWithNotes,
         p_product_id: product.id,
         p_quantity: quantity,
         p_unit_price: product.price,
@@ -886,6 +910,8 @@ export default function Checkout() {
                   <span>{t('shipping_cost')}</span>
                   {!addressDetails.province ? (
                     <span className="text-gray-400">{t('not_calculated')}</span>
+                  ) : (addressDetails.country === 'Luar Indonesia' || (addressDetails.country && addressDetails.country.toLowerCase() !== 'indonesia')) && nonFreeSubtotal > 0 ? (
+                    <span className="text-emas font-bold">Bayar Ongkir di Tempat</span>
                   ) : shippingCost === 0 ? (
                     <span className="text-green-600 font-semibold">{t('free_shipping')}</span>
                   ) : (
@@ -899,6 +925,11 @@ export default function Checkout() {
                       rate: formatPrice(baseShipping, currency, rates), 
                       percent: ((nonFreeSubtotal / totalSubtotal) * 100).toFixed(1) 
                     })}
+                  </div>
+                )}
+                {(addressDetails.country === 'Luar Indonesia' || (addressDetails.country && addressDetails.country.toLowerCase() !== 'indonesia')) && nonFreeSubtotal > 0 && (
+                  <div className="text-[11px] text-emas text-right italic font-medium">
+                    Ongkir ditanggung pembeli saat barang sampai (COD)
                   </div>
                 )}
               </div>
