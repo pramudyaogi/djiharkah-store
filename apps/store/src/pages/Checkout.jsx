@@ -301,7 +301,9 @@ export default function Checkout() {
       const country = (address.country || '').toLowerCase();
       
       const isLuarIndo = prov.includes('luar indonesia') || 
+                         prov.includes('luar negeri') ||
                          country.includes('luar indonesia') || 
+                         country.includes('luar negeri') ||
                          (country !== '' && !country.includes('indonesia'));
       return !isLuarIndo;
     }
@@ -315,6 +317,7 @@ export default function Checkout() {
 
     const country = (addressInfo.country || '').toLowerCase();
     const isInternational = addressInfo.country === 'Luar Indonesia' || 
+                            addressInfo.country === 'Luar Negeri' || 
                             (addressInfo.country && country !== 'indonesia');
 
     // Calculate subtotal of non-free shipping products first
@@ -500,7 +503,7 @@ export default function Checkout() {
     setAddressErrors({});
     
     // Set initial map position based on whether they have a saved address
-    if (addressDetails.province && addressDetails.province !== 'Luar Indonesia') {
+    if (addressDetails.province && addressDetails.province !== 'Luar Indonesia' && addressDetails.province !== 'Luar Negeri') {
       // It will trigger the useEffect geocoding automatically because tempAddress changes
     } else {
       // Show entire Indonesia initially
@@ -534,14 +537,14 @@ export default function Checkout() {
       const updated = {
         ...tempAddress,
         country: tempAddress.countryName.trim(),
-        province: 'Luar Indonesia',
-        city: 'Luar Indonesia',
-        subdistrict: 'Luar Indonesia',
+        province: 'Luar Negeri',
+        city: 'Luar Negeri',
+        subdistrict: 'Luar Negeri',
         postalCode: ''
       };
 
       setAddressDetails(updated);
-      calculateShipping('Luar Indonesia', updated);
+      calculateShipping('Luar Negeri', updated);
       setFormData(prev => ({ ...prev, address: `${updated.street.trim()}, ${updated.country.trim()}` }));
       setIsModalOpen(false);
       return;
@@ -984,15 +987,15 @@ export default function Checkout() {
                   <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('country')} *</label>
                   <select
                     name="country"
-                    value={tempAddress.country === 'Indonesia' ? 'Indonesia' : 'Luar Indonesia'}
+                    value={tempAddress.country === 'Indonesia' ? 'Indonesia' : 'Luar Negeri'}
                     onChange={(e) => {
                       const val = e.target.value;
                       setTempAddress(prev => ({
                         ...prev,
                         country: val,
-                        province: val === 'Luar Indonesia' ? 'Luar Indonesia' : '',
-                        city: val === 'Luar Indonesia' ? 'Luar Indonesia' : '',
-                        subdistrict: val === 'Luar Indonesia' ? 'Luar Indonesia' : '',
+                        province: val === 'Luar Negeri' ? 'Luar Negeri' : '',
+                        city: val === 'Luar Negeri' ? 'Luar Negeri' : '',
+                        subdistrict: val === 'Luar Negeri' ? 'Luar Negeri' : '',
                         postalCode: '',
                         street: '',
                         countryName: ''
@@ -1004,7 +1007,7 @@ export default function Checkout() {
                     }`}
                   >
                     <option value="Indonesia">Indonesia</option>
-                    <option value="Luar Indonesia">{language === 'EN' ? 'Outside Indonesia' : 'Luar Indonesia'}</option>
+                    <option value="Luar Negeri">{language === 'EN' ? 'Outside Indonesia' : 'Luar Negeri'}</option>
                   </select>
                   {addressErrors.country && (
                     <p className="text-[11px] text-red-500 font-medium mt-1">{addressErrors.country}</p>
@@ -1147,7 +1150,7 @@ export default function Checkout() {
                 <div>
                   <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
                     {tempAddress.country !== 'Indonesia' 
-                      ? (language === 'EN' ? 'Full Address (Outside Indonesia) *' : 'Alamat Lengkap (Luar Indonesia) *') 
+                      ? (language === 'EN' ? 'Full Address (Outside Indonesia) *' : 'Alamat Lengkap (Luar Negeri) *') 
                       : t('street_address_label')}
                   </label>
                   <textarea
