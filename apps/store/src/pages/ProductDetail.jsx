@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Store, Star, Share2, Heart, ShieldCheck, ShoppingCart, User, AlertCircle, ChevronLeft, ChevronRight, X, MapPin } from 'lucide-react';
+import { Store, Star, Share2, Heart, ShieldCheck, ShoppingCart, User, AlertCircle, ChevronLeft, ChevronRight, X, MapPin, Play } from 'lucide-react';
 import PopupModal from '../components/PopupModal';
 import useCurrencyStore from '../store/useCurrencyStore';
 import { useCart } from '../contexts/CartContext';
@@ -43,6 +43,10 @@ export default function ProductDetail() {
     }
   };
 
+  const isVideoUrl = (url) => {
+    return url && typeof url === 'string' && url.match(/\.(mp4|webm|ogg|mov|avi|mkv|3gp)($|\?)/i);
+  };
+
   const productImages = product?.images && product.images.length > 0
     ? product.images
     : (product?.image_url ? [product.image_url] : []);
@@ -64,6 +68,7 @@ export default function ProductDetail() {
           .from('products')
           .select('*, categories(name, slug)')
           .eq('slug', slug)
+          .eq('is_archived', false)
           .single();
         
         if (prodError) throw prodError;
@@ -248,22 +253,33 @@ export default function ProductDetail() {
               <div 
                 ref={scrollContainerRef}
                 onScroll={handleScroll}
-                className="absolute inset-0 flex overflow-x-auto scroll-smooth snap-x snap-mandatory hide-scrollbar cursor-zoom-in"
+                className="absolute inset-0 flex overflow-x-auto scroll-smooth snap-x snap-mandatory hide-scrollbar"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               >
-                {productImages.map((imgUrl, idx) => (
-                  <div 
-                    key={idx} 
-                    className="w-full h-full shrink-0 snap-start relative"
-                    onClick={() => setIsLightboxOpen(true)}
-                  >
-                    <img 
-                      src={imgUrl} 
-                      alt={`${product.name} ${idx + 1}`} 
-                      className="w-full h-full object-cover pointer-events-none" 
-                    />
-                  </div>
-                ))}
+                {productImages.map((imgUrl, idx) => {
+                  const isVideo = isVideoUrl(imgUrl);
+                  return (
+                    <div 
+                      key={idx} 
+                      className="w-full h-full shrink-0 snap-start relative bg-black flex items-center justify-center"
+                    >
+                      {isVideo ? (
+                        <video 
+                          src={imgUrl} 
+                          controls 
+                          className="w-full h-full object-contain" 
+                        />
+                      ) : (
+                        <img 
+                          src={imgUrl} 
+                          alt={`${product.name} ${idx + 1}`} 
+                          className="w-full h-full object-cover cursor-zoom-in" 
+                          onClick={() => setIsLightboxOpen(true)}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="absolute inset-0 flex items-center justify-center text-gray-300 font-bold bg-gray-100">NO IMG</div>
@@ -288,17 +304,29 @@ export default function ProductDetail() {
           {/* Thumbnails */}
           {productImages.length > 1 && (
             <div className="flex gap-2 overflow-x-auto py-1 hide-scrollbar">
-              {productImages.map((imgUrl, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleThumbnailClick(idx)}
-                  className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all shrink-0 ${
-                    idx === activeImageIndex ? 'border-emas shadow-sm scale-95' : 'border-transparent hover:border-gray-200'
-                  }`}
-                >
-                  <img src={imgUrl} alt={`${product.name} ${idx + 1}`} className="w-full h-full object-cover pointer-events-none" />
-                </button>
-              ))}
+              {productImages.map((imgUrl, idx) => {
+                const isVideo = isVideoUrl(imgUrl);
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => handleThumbnailClick(idx)}
+                    className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all shrink-0 relative ${
+                      idx === activeImageIndex ? 'border-emas shadow-sm scale-95' : 'border-transparent hover:border-gray-200'
+                    }`}
+                  >
+                    {isVideo ? (
+                      <div className="w-full h-full bg-black relative flex items-center justify-center">
+                        <video src={imgUrl} className="w-full h-full object-cover opacity-60" muted />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                          <Play size={16} className="text-white fill-white" />
+                        </div>
+                      </div>
+                    ) : (
+                      <img src={imgUrl} alt={`${product.name} ${idx + 1}`} className="w-full h-full object-cover pointer-events-none" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -483,11 +511,20 @@ export default function ProductDetail() {
               </button>
             )}
 
-            <img 
-              src={productImages[activeImageIndex]} 
-              alt={product.name} 
-              className="max-w-full max-h-[75vh] object-contain rounded-lg shadow-2xl transition-all duration-300 transform scale-100"
-            />
+            {isVideoUrl(productImages[activeImageIndex]) ? (
+              <video 
+                src={productImages[activeImageIndex]} 
+                controls 
+                autoPlay
+                className="max-w-full max-h-[75vh] object-contain rounded-lg shadow-2xl transition-all duration-300 transform scale-100"
+              />
+            ) : (
+              <img 
+                src={productImages[activeImageIndex]} 
+                alt={product.name} 
+                className="max-w-full max-h-[75vh] object-contain rounded-lg shadow-2xl transition-all duration-300 transform scale-100"
+              />
+            )}
 
             {/* Right Button */}
             {productImages.length > 1 && (
@@ -503,17 +540,29 @@ export default function ProductDetail() {
           {/* Thumbnails bottom selector */}
           {productImages.length > 1 && (
             <div className="flex justify-center gap-2 overflow-x-auto py-2 z-10 max-w-md mx-auto hide-scrollbar">
-              {productImages.map((imgUrl, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => setActiveImageIndex(idx)}
-                  className={`w-12 h-12 rounded-lg overflow-hidden border-2 transition-all shrink-0 ${
-                    idx === activeImageIndex ? 'border-emas shadow-lg scale-105' : 'border-transparent opacity-50 hover:opacity-100'
-                  }`}
-                >
-                  <img src={imgUrl} alt="Thumbnail selector" className="w-full h-full object-cover pointer-events-none" />
-                </button>
-              ))}
+              {productImages.map((imgUrl, idx) => {
+                const isVideo = isVideoUrl(imgUrl);
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => setActiveImageIndex(idx)}
+                    className={`w-12 h-12 rounded-lg overflow-hidden border-2 transition-all shrink-0 relative bg-black ${
+                      idx === activeImageIndex ? 'border-emas shadow-lg scale-105' : 'border-transparent opacity-50 hover:opacity-100'
+                    }`}
+                  >
+                    {isVideo ? (
+                      <div className="w-full h-full relative flex items-center justify-center">
+                        <video src={imgUrl} className="w-full h-full object-cover opacity-60" muted />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                          <Play size={12} className="text-white fill-white" />
+                        </div>
+                      </div>
+                    ) : (
+                      <img src={imgUrl} alt="Thumbnail selector" className="w-full h-full object-cover pointer-events-none" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>

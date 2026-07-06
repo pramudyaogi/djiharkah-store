@@ -65,7 +65,7 @@ export default function Home() {
               .order('sort_order', { ascending: true })
               .then(({ data }) => {
                 return data?.map(r => {
-                  if (!r.products) return null;
+                  if (!r.products || r.products.is_archived) return null;
                   const finalDiscount = activeFS.use_default_discount
                     ? (activeFS.discount_percent || 0)
                     : (r.discount_percent !== null && r.discount_percent !== undefined ? r.discount_percent : (activeFS.discount_percent || 0));
@@ -99,7 +99,7 @@ export default function Home() {
               .order('sort_order', { ascending: true })
               .then(({ data }) => {
                 return data?.map(r => {
-                  if (!r.products) return null;
+                  if (!r.products || r.products.is_archived) return null;
                   const finalDiscount = activeCP.use_default_discount
                     ? (activeCP.discount_percent || 0)
                     : (r.discount_percent !== null && r.discount_percent !== undefined ? r.discount_percent : (activeCP.discount_percent || 0));

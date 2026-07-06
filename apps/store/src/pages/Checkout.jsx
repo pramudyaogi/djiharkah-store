@@ -297,14 +297,8 @@ export default function Checkout() {
     }
 
     if (type === 'indonesia') {
-      const prov = (address.province || '').toLowerCase();
       const country = (address.country || '').toLowerCase();
-      
-      const isLuarIndo = prov.includes('luar indonesia') || 
-                         prov.includes('luar negeri') ||
-                         country.includes('luar indonesia') || 
-                         country.includes('luar negeri') ||
-                         (country !== '' && !country.includes('indonesia'));
+      const isLuarIndo = country !== '' && country !== 'indonesia';
       return !isLuarIndo;
     }
 
@@ -316,9 +310,7 @@ export default function Checkout() {
     if (!provinceName) return;
 
     const country = (addressInfo.country || '').toLowerCase();
-    const isInternational = addressInfo.country === 'Luar Indonesia' || 
-                            addressInfo.country === 'Luar Negeri' || 
-                            (addressInfo.country && country !== 'indonesia');
+    const isInternational = addressInfo.country && country !== 'indonesia';
 
     // Calculate subtotal of non-free shipping products first
     const totalNonFreeSubtotal = cartItems?.reduce((total, item) => {
@@ -393,7 +385,7 @@ export default function Checkout() {
       clearTimeout(geocodeTimerRef.current);
     }
 
-    if (tempAddress.country === 'Luar Indonesia') {
+    if (tempAddress.country !== 'Indonesia') {
       return; // Do not geocode international addresses on map
     }
 
@@ -495,15 +487,17 @@ export default function Checkout() {
   };
 
   const openAddressModal = () => {
+    const isIndo = addressDetails.country === 'Indonesia';
     const targetAddress = {
       ...addressDetails,
-      countryName: addressDetails.country === 'Indonesia' ? '' : addressDetails.country
+      countryMode: isIndo ? 'Indonesia' : 'manual',
+      countryName: isIndo ? '' : addressDetails.country
     };
     setTempAddress(targetAddress);
     setAddressErrors({});
     
     // Set initial map position based on whether they have a saved address
-    if (addressDetails.province && addressDetails.province !== 'Luar Indonesia' && addressDetails.province !== 'Luar Negeri') {
+    if (isIndo && addressDetails.province) {
       // It will trigger the useEffect geocoding automatically because tempAddress changes
     } else {
       // Show entire Indonesia initially
@@ -520,13 +514,12 @@ export default function Checkout() {
     
     // Check validation of structured address
     const errors = {};
-    const isEn = language === 'EN';
-    if (tempAddress.country !== 'Indonesia') {
+    if (tempAddress.countryMode === 'manual') {
       if (!tempAddress.countryName || !tempAddress.countryName.trim()) {
-        errors.countryName = isEn ? "Country name is required" : "Nama negara wajib diisi";
+        errors.countryName = t('country_name_label') + ' ' + t('address_required').toLowerCase();
       }
       if (!tempAddress.street.trim()) {
-        errors.street = isEn ? "Full address is required" : "Alamat Lengkap wajib diisi";
+        errors.street = t('full_address_label') + ' ' + t('address_required').toLowerCase();
       }
       if (Object.keys(errors).length > 0) {
         setAddressErrors(errors);
@@ -534,18 +527,19 @@ export default function Checkout() {
       }
       setAddressErrors({});
 
+      const typedCountry = tempAddress.countryName.trim();
       const updated = {
         ...tempAddress,
-        country: tempAddress.countryName.trim(),
-        province: 'Luar Negeri',
-        city: 'Luar Negeri',
-        subdistrict: 'Luar Negeri',
+        country: typedCountry,
+        province: typedCountry,
+        city: typedCountry,
+        subdistrict: '',
         postalCode: ''
       };
 
       setAddressDetails(updated);
-      calculateShipping('Luar Negeri', updated);
-      setFormData(prev => ({ ...prev, address: `${updated.street.trim()}, ${updated.country.trim()}` }));
+      calculateShipping(typedCountry, updated);
+      setFormData(prev => ({ ...prev, address: `${updated.street.trim()}, ${typedCountry}` }));
       setIsModalOpen(false);
       return;
     }
@@ -913,8 +907,8 @@ export default function Checkout() {
                   <span>{t('shipping_cost')}</span>
                   {!addressDetails.province ? (
                     <span className="text-gray-400">{t('not_calculated')}</span>
-                  ) : (addressDetails.country === 'Luar Indonesia' || (addressDetails.country && addressDetails.country.toLowerCase() !== 'indonesia')) && nonFreeSubtotal > 0 ? (
-                    <span className="text-emas font-bold">Bayar Ongkir di Tempat</span>
+                  ) : (addressDetails.country && addressDetails.country.toLowerCase() !== 'indonesia') && nonFreeSubtotal > 0 ? (
+                    <span className="text-emas font-bold text-right flex-1 pl-4" style={{ textAlign: 'right' }}>{t('pay_shipping_on_delivery')}</span>
                   ) : shippingCost === 0 ? (
                     <span className="text-green-600 font-semibold">{t('free_shipping')}</span>
                   ) : (
@@ -930,9 +924,9 @@ export default function Checkout() {
                     })}
                   </div>
                 )}
-                {(addressDetails.country === 'Luar Indonesia' || (addressDetails.country && addressDetails.country.toLowerCase() !== 'indonesia')) && nonFreeSubtotal > 0 && (
-                  <div className="text-[11px] text-emas text-right italic font-medium">
-                    Ongkir ditanggung pembeli saat barang sampai (COD)
+                {(addressDetails.country && addressDetails.country.toLowerCase() !== 'indonesia') && nonFreeSubtotal > 0 && (
+                  <div className="text-[11px] text-emas text-right italic font-medium w-full" style={{ textAlign: 'right' }}>
+                    {t('cod_shipping_subtext')}
                   </div>
                 )}
               </div>
@@ -958,8 +952,8 @@ export default function Checkout() {
       {/* MODAL POPUP FOR ADDRESS */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity duration-300">
-          <div className={`bg-white rounded-3xl w-full max-h-[92vh] overflow-y-auto shadow-2xl flex flex-col transform transition-all scale-100 duration-300 border border-gray-100 transition-all duration-300 ${
-            tempAddress.country !== 'Indonesia' ? 'max-w-lg' : 'max-w-4xl'
+          <div className={`bg-white rounded-3xl w-full max-h-[92vh] overflow-y-auto shadow-2xl flex flex-col transform transition-all scale-100 duration-300 border border-gray-100 ${
+            tempAddress.countryMode === 'manual' ? 'max-w-lg' : 'max-w-4xl'
           }`}>
             
             {/* Modal Header */}
@@ -978,7 +972,7 @@ export default function Checkout() {
             </div>
 
             {/* Modal Body */}
-            <div className={`p-6 overflow-y-auto ${tempAddress.country !== 'Indonesia' ? 'max-w-md mx-auto w-full' : 'grid grid-cols-1 md:grid-cols-2 gap-6'}`}>
+            <div className={`p-6 overflow-y-auto ${tempAddress.countryMode === 'manual' ? 'max-w-md mx-auto w-full' : 'grid grid-cols-1 md:grid-cols-2 gap-6'}`}>
               
               {/* Form Fields */}
               <form onSubmit={saveAddressModal} noValidate className="space-y-4">
@@ -986,16 +980,17 @@ export default function Checkout() {
                 <div>
                   <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('country')} *</label>
                   <select
-                    name="country"
-                    value={tempAddress.country === 'Indonesia' ? 'Indonesia' : 'Luar Negeri'}
+                    name="countryMode"
+                    value={tempAddress.countryMode || 'Indonesia'}
                     onChange={(e) => {
                       const val = e.target.value;
                       setTempAddress(prev => ({
                         ...prev,
-                        country: val,
-                        province: val === 'Luar Negeri' ? 'Luar Negeri' : '',
-                        city: val === 'Luar Negeri' ? 'Luar Negeri' : '',
-                        subdistrict: val === 'Luar Negeri' ? 'Luar Negeri' : '',
+                        countryMode: val,
+                        country: val === 'Indonesia' ? 'Indonesia' : '',
+                        province: '',
+                        city: '',
+                        subdistrict: '',
                         postalCode: '',
                         street: '',
                         countryName: ''
@@ -1007,24 +1002,24 @@ export default function Checkout() {
                     }`}
                   >
                     <option value="Indonesia">Indonesia</option>
-                    <option value="Luar Negeri">{language === 'EN' ? 'Outside Indonesia' : 'Luar Negeri'}</option>
+                    <option value="manual">{t('enter_country_manually')}</option>
                   </select>
-                  {addressErrors.country && (
-                    <p className="text-[11px] text-red-500 font-medium mt-1">{addressErrors.country}</p>
-                  )}
                 </div>
 
-                {tempAddress.country !== 'Indonesia' && (
+                {tempAddress.countryMode === 'manual' && (
                   <div>
                     <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-                      {language === 'EN' ? 'Country Name *' : 'Nama Negara *'}
+                      {t('country_name_label')} *
                     </label>
                     <input
                       type="text"
                       name="countryName"
                       value={tempAddress.countryName || ''}
-                      onChange={handleAddressChange}
-                      placeholder={language === 'EN' ? 'e.g. Singapore, Malaysia...' : 'misal: Singapura, Malaysia...'}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setTempAddress(prev => ({ ...prev, countryName: val }));
+                      }}
+                      placeholder={t('country_name_placeholder')}
                       className={`w-full px-3 py-2 bg-gray-50 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-emas/20 transition-all ${
                         addressErrors.countryName ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
                       }`}
@@ -1035,7 +1030,7 @@ export default function Checkout() {
                   </div>
                 )}
 
-                {tempAddress.country === 'Indonesia' && (
+                {tempAddress.countryMode !== 'manual' && (
                   <>
                     {/* 2. Provinsi (Province) */}
                     <div>
@@ -1149,22 +1144,22 @@ export default function Checkout() {
                 {/* 5. Jalan / Detail Alamat (Street) */}
                 <div>
                   <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-                    {tempAddress.country !== 'Indonesia' 
-                      ? (language === 'EN' ? 'Full Address (Outside Indonesia) *' : 'Alamat Lengkap (Luar Negeri) *') 
+                    {tempAddress.countryMode === 'manual' 
+                      ? `${t('full_address_label')} *`
                       : t('street_address_label')}
                   </label>
                   <textarea
                     name="street"
-                    rows={tempAddress.country !== 'Indonesia' ? 4 : 2}
+                    rows={tempAddress.countryMode === 'manual' ? 4 : 2}
                     value={tempAddress.street}
                     onChange={handleAddressChange}
-                    placeholder={tempAddress.country !== 'Indonesia' 
-                      ? (language === 'EN' ? 'Enter your full international address...' : 'Masukkan alamat lengkap luar negeri Anda...') 
+                    placeholder={tempAddress.countryMode === 'manual' 
+                      ? t('full_address_placeholder')
                       : t('street_address_placeholder')}
                     className={`w-full px-3 py-2 bg-gray-50 border rounded-xl text-hitam text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-emas/20 transition-all placeholder:text-gray-300 resize-none disabled:opacity-60 ${
                       addressErrors.street ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-emas'
                     }`}
-                    disabled={tempAddress.country === 'Indonesia' && !tempAddress.subdistrict}
+                    disabled={tempAddress.countryMode !== 'manual' && !tempAddress.subdistrict}
                   />
                   {addressErrors.street && (
                     <p className="text-[11px] text-red-500 font-medium mt-1">{addressErrors.street}</p>
@@ -1189,7 +1184,7 @@ export default function Checkout() {
               </form>
 
               {/* Map Section inside Modal */}
-              {tempAddress.country === 'Indonesia' && (
+              {tempAddress.countryMode !== 'manual' && (
                 <div className="flex flex-col border border-gray-200 rounded-2xl overflow-hidden bg-gray-50/50">
                   <div className="px-4 py-2 bg-white border-b border-gray-100 flex items-center justify-between text-xs font-semibold text-gray-500">
                     <div className="flex items-center gap-1.5">

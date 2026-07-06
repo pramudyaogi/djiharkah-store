@@ -40,8 +40,56 @@ export async function getProducts() {
       *,
       categories (name)
     `)
+    .eq('is_archived', false)
     .order('display_order', { ascending: true })
     .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Fetch all archived products
+ */
+export async function getArchivedProducts() {
+  const { data, error } = await supabase
+    .from('products')
+    .select(`
+      *,
+      categories (name)
+    `)
+    .eq('is_archived', true)
+    .order('archived_at', { ascending: false });
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Restore an archived product by setting new stock
+ */
+export async function restoreProduct(id, newStock) {
+  const { data, error } = await supabase
+    .from('products')
+    .update({ stock: newStock, is_archived: false, is_active: true, archived_at: null })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Permanently delete a product from the database
+ */
+export async function deleteProductPermanently(id) {
+  const { data, error } = await supabase
+    .from('products')
+    .delete()
+    .eq('id', id)
+    .select()
+    .single();
 
   if (error) throw error;
   return data;

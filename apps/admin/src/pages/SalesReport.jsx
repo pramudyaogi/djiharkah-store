@@ -14,7 +14,7 @@ export default function SalesReport() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('sold_count'); // sold_count | revenue | name
-  const [activeTab, setActiveTab] = useState('products'); // products | transactions
+  const [activeTab, setActiveTab] = useState('transactions'); // products | transactions
   
   // Date states
   const [dateRange, setDateRange] = useState({
@@ -67,6 +67,10 @@ export default function SalesReport() {
     if (!dateRange.startDate || !dateRange.endDate) return;
     setLoading(true);
     try {
+      const start = new Date(`${dateRange.startDate}T00:00:00`).toISOString();
+      const end = new Date(`${dateRange.endDate}T23:59:59`).toISOString();
+
+      // 1. Fetch active orders
       let query = supabase
         .from('orders')
         .select(`
@@ -88,48 +92,94 @@ export default function SalesReport() {
             )
           )
         `)
-        .in('status', ['processing', 'shipped', 'delivered']);
-
-      // Convert local date string to start and end ISO strings
-      const start = new Date(`${dateRange.startDate}T00:00:00`).toISOString();
-      const end = new Date(`${dateRange.endDate}T23:59:59`).toISOString();
-      
-      query = query.gte('created_at', start).lte('created_at', end);
+        .in('status', ['processing', 'shipped', 'delivered'])
+        .gte('created_at', start)
+        .lte('created_at', end);
 
       const { data: fetchedOrders, error } = await query.order('created_at', { ascending: false });
       if (error) throw error;
 
-      const safeOrders = fetchedOrders || [];
-      setOrders(safeOrders);
+      // 2. Fetch archived (deleted) sales_records (with safety check if table doesn't exist yet)
+      let fetchedArchive = [];
+      try {
+        let archiveQuery = supabase
+          .from('sales_records')
+          .select(`
+            id,
+            tracking_code,
+            created_at,
+            status,
+            customer_name,
+            shipping_cost,
+            net_amount,
+            items_count
+          `)
+          .gte('created_at', start)
+          .lte('created_at', end);
+
+        const { data: archiveData, error: archiveError } = await archiveQuery.order('created_at', { ascending: false });
+        if (!archiveError) {
+          fetchedArchive = archiveData || [];
+        } else {
+          console.warn('sales_records table might not exist yet. Please run migration.', archiveError);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch sales_records:', err);
+      }
+
+      // Map archive records to match orders structure
+      const mappedArchive = fetchedArchive.map(item => ({
+        id: item.id,
+        tracking_code: item.tracking_code,
+        created_at: item.created_at,
+        status: item.status,
+        shipping_cost: item.shipping_cost,
+        total_amount: parseFloat(item.net_amount) + parseFloat(item.shipping_cost),
+        profiles: { full_name: item.customer_name },
+        shipping_address: item.customer_name, // fallback
+        is_archived_record: true,
+        items_count: item.items_count,
+        order_items: []
+      }));
+
+      // Combine active and archived orders
+      const combinedOrders = [...(fetchedOrders || []), ...mappedArchive];
+      combinedOrders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+      setOrders(combinedOrders);
 
       // Calculations
       let totalRevenue = 0;
       let totalSold = 0;
       const productMap = {};
 
-      safeOrders.forEach(order => {
+      combinedOrders.forEach(order => {
         // Revenue is calculated net (excluding shipping cost)
         const netAmount = parseFloat(order.total_amount) - parseFloat(order.shipping_cost);
         totalRevenue += netAmount >= 0 ? netAmount : 0;
 
-        order.order_items?.forEach(item => {
-          totalSold += item.quantity;
-          const p = item.products;
-          if (!p) return;
+        if (order.is_archived_record) {
+          totalSold += order.items_count || 0;
+        } else {
+          order.order_items?.forEach(item => {
+            totalSold += item.quantity;
+            const p = item.products;
+            if (!p) return;
 
-          if (!productMap[p.id]) {
-            productMap[p.id] = {
-              product: p,
-              totalSold: 0,
-              totalRevenue: 0,
-            };
-          }
-          productMap[p.id].totalSold += item.quantity;
-          productMap[p.id].totalRevenue += item.quantity * parseFloat(item.unit_price);
-        });
+            if (!productMap[p.id]) {
+              productMap[p.id] = {
+                product: p,
+                totalSold: 0,
+                totalRevenue: 0,
+              };
+            }
+            productMap[p.id].totalSold += item.quantity;
+            productMap[p.id].totalRevenue += item.quantity * parseFloat(item.unit_price);
+          });
+        }
       });
 
-      const totalOrders = safeOrders.length;
+      const totalOrders = combinedOrders.length;
       const averageValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
       setSummary({
@@ -171,9 +221,13 @@ export default function SalesReport() {
       const cleanRevenue = netAmount >= 0 ? netAmount : 0;
       
       let itemsCount = 0;
-      order.order_items?.forEach(item => {
-        itemsCount += item.quantity;
-      });
+      if (order.is_archived_record) {
+        itemsCount = order.items_count || 0;
+      } else {
+        order.order_items?.forEach(item => {
+          itemsCount += item.quantity;
+        });
+      }
 
       if (dailyMap[dateStr] !== undefined) {
         dailyMap[dateStr].revenue += cleanRevenue;
@@ -459,33 +513,8 @@ export default function SalesReport() {
         
         {/* Navigation & Search */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 dark:border-zinc-800/60 pb-4">
-          <div className="flex gap-4">
-            <button
-              onClick={() => {
-                setActiveTab('products');
-                setSearchTerm('');
-              }}
-              className={`pb-4 text-sm font-bold border-b-2 transition-all ${
-                activeTab === 'products'
-                  ? 'border-emas text-emas'
-                  : 'border-transparent text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
-              }`}
-            >
-              Ringkasan Produk
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('transactions');
-                setSearchTerm('');
-              }}
-              className={`pb-4 text-sm font-bold border-b-2 transition-all ${
-                activeTab === 'transactions'
-                  ? 'border-emas text-emas'
-                  : 'border-transparent text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
-              }`}
-            >
-              Daftar Transaksi
-            </button>
+          <div>
+            <h3 className="text-lg font-bold text-gray-800 dark:text-zinc-200">Daftar Transaksi</h3>
           </div>
 
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
@@ -494,25 +523,12 @@ export default function SalesReport() {
               <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
               <input
                 type="text"
-                placeholder={activeTab === 'products' ? "Cari produk..." : "Cari resi / pelanggan..."}
+                placeholder="Cari resi / pelanggan..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full bg-white dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-xl pl-9 pr-4 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-emas"
               />
             </div>
-
-            {/* Sort for Products */}
-            {activeTab === 'products' && (
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="w-full sm:w-44 bg-white dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-emas"
-              >
-                <option value="sold_count">Terlaris</option>
-                <option value="revenue">Pendapatan Tertinggi</option>
-                <option value="name">Nama A-Z</option>
-              </select>
-            )}
           </div>
         </div>
 
@@ -520,61 +536,6 @@ export default function SalesReport() {
         {loading ? (
           <div className="flex justify-center items-center py-20">
             <div className="w-8 h-8 border-4 border-emas border-t-transparent rounded-full animate-spin"></div>
-          </div>
-        ) : activeTab === 'products' ? (
-          /* Products Breakdown Table */
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-gray-200 dark:border-zinc-800 text-sm font-bold text-gray-500 uppercase tracking-wider">
-                  <th className="pb-3 pl-2">No</th>
-                  <th className="pb-3">Produk</th>
-                  <th className="pb-3">Kategori</th>
-                  <th className="pb-3 text-right">Stok Sisa</th>
-                  <th className="pb-3 text-right">Kuantitas Terjual</th>
-                  <th className="pb-3 text-right">Pendapatan Kotor</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-zinc-800/60 text-sm">
-                {filteredProducts.length === 0 ? (
-                  <tr>
-                    <td colSpan="6" className="text-center py-12 text-gray-400 dark:text-zinc-500">
-                      Tidak ada produk terjual dalam periode ini.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredProducts.map((row, idx) => (
-                    <tr key={row.product?.id} className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/20">
-                      <td className="py-4 pl-2 text-gray-400 dark:text-zinc-500">{idx + 1}</td>
-                      <td className="py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gray-100 dark:bg-zinc-800 rounded-lg overflow-hidden shrink-0 border border-gray-200 dark:border-zinc-700">
-                            {row.product?.image_url ? (
-                              <img src={row.product.image_url} alt={row.product.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">NO IMG</div>
-                            )}
-                          </div>
-                          <span className="font-semibold text-gray-900 dark:text-white line-clamp-2 max-w-xs">{row.product?.name}</span>
-                        </div>
-                      </td>
-                      <td className="py-4 text-gray-500 dark:text-zinc-400">{row.product?.categories?.name || '-'}</td>
-                      <td className="py-4 text-right font-medium">
-                        <span className={(row.product?.stock ?? 0) === 0 ? 'text-red-500 font-bold' : 'text-gray-900 dark:text-white'}>
-                          {row.product?.stock ?? 0}
-                        </span>
-                      </td>
-                      <td className="py-4 text-right font-bold text-yellow-600 dark:text-yellow-400">
-                        {row.totalSold} pcs
-                      </td>
-                      <td className="py-4 text-right font-bold text-gray-900 dark:text-white">
-                        Rp {row.totalRevenue.toLocaleString('id-ID')}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
           </div>
         ) : (
           /* Transaction List Table */
@@ -586,14 +547,13 @@ export default function SalesReport() {
                   <th className="pb-3">Kode Resi</th>
                   <th className="pb-3">Pelanggan</th>
                   <th className="pb-3 text-center">Status</th>
-                  <th className="pb-3 text-right">Ongkir</th>
                   <th className="pb-3 text-right">Total Bersih</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-zinc-800/60 text-sm">
                 {filteredTransactions.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="text-center py-12 text-gray-400 dark:text-zinc-500">
+                    <td colSpan="5" className="text-center py-12 text-gray-400 dark:text-zinc-500">
                       Tidak ada transaksi dalam periode ini.
                     </td>
                   </tr>
@@ -628,9 +588,6 @@ export default function SalesReport() {
                           }`}>
                             {o.status === 'processing' ? 'Diproses' : o.status === 'shipped' ? 'Dikirim' : 'Selesai'}
                           </span>
-                        </td>
-                        <td className="py-4 text-right font-medium text-gray-500 dark:text-zinc-400">
-                          Rp {Number(o.shipping_cost).toLocaleString('id-ID')}
                         </td>
                         <td className="py-4 text-right font-bold text-gray-900 dark:text-white">
                           Rp {netAmount.toLocaleString('id-ID')}

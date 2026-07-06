@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Upload, Save, X, GripVertical } from 'lucide-react';
+import { ArrowLeft, Upload, Save, X, GripVertical, Play } from 'lucide-react';
 import { getProductById, getCategories, getProducts, createProduct, updateProduct, uploadProductImage } from '../services/products';
 import { useToast } from '../contexts/ToastContext';
 
@@ -222,27 +222,94 @@ export default function ProductForm() {
     });
   };
 
-  const handleImageChange = (e) => {
+  const handleImageChange = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
 
-    setImagesList(prev => {
-      const remainingSlots = 5 - prev.length;
-      if (remainingSlots <= 0) {
-        showToast('Maksimal 5 foto per produk', 'warning');
-        return prev;
+    // Reset input so same file can be selected again
+    e.target.value = '';
+
+    const currentTotal = imagesList.length;
+    const currentVideos = imagesList.filter(item => {
+      if (item.file) {
+        return item.file.type.startsWith('video/');
       }
-      
-      const newItems = files.slice(0, remainingSlots).map((file, idx) => ({
-        id: `new-${Date.now()}-${idx}`,
+      return item.url && item.url.match(/\.(mp4|webm|ogg|mov|avi|mkv|3gp)($|\?)/i);
+    }).length;
+
+    let validNewItems = [];
+    let addedTotal = currentTotal;
+    let addedVideos = currentVideos;
+
+    for (const file of files) {
+      if (addedTotal >= 5) {
+        showToast('Maksimal gabungan 5 foto dan video per produk', 'warning');
+        break;
+      }
+
+      const isVideo = file.type.startsWith('video/');
+      const isImage = file.type.startsWith('image/');
+
+      if (!isVideo && !isImage) {
+        showToast(`File "${file.name}" tidak didukung. Harus berupa foto atau video.`, 'warning');
+        continue;
+      }
+
+      if (isVideo) {
+        if (addedVideos >= 2) {
+          showToast(`File "${file.name}" dilewati. Maksimal 2 file video per produk.`, 'warning');
+          continue;
+        }
+        if (file.size > 25 * 1024 * 1024) {
+          showToast(`File "${file.name}" dilewati. Ukuran video maksimal 25MB.`, 'warning');
+          continue;
+        }
+
+        // Validate video duration asynchronously
+        try {
+          const duration = await new Promise((resolve, reject) => {
+            const video = document.createElement('video');
+            video.preload = 'metadata';
+            video.onloadedmetadata = () => {
+              window.URL.revokeObjectURL(video.src);
+              resolve(video.duration);
+            };
+            video.onerror = () => {
+              window.URL.revokeObjectURL(video.src);
+              reject(new Error('Gagal memuat metadata video'));
+            };
+            video.src = URL.createObjectURL(file);
+          });
+
+          if (duration > 30) {
+            showToast(`File "${file.name}" dilewati. Durasi video maksimal 30 detik.`, 'warning');
+            continue;
+          }
+        } catch (err) {
+          showToast(`File "${file.name}" dilewati. Format video tidak valid atau rusak.`, 'warning');
+          continue;
+        }
+
+        addedVideos++;
+      } else {
+        // Image validation
+        if (file.size > 2 * 1024 * 1024) {
+          showToast(`File "${file.name}" dilewati. Ukuran foto maksimal 2MB.`, 'warning');
+          continue;
+        }
+      }
+
+      validNewItems.push({
+        id: `new-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         url: URL.createObjectURL(file),
         file: file
-      }));
-      
-      return [...prev, ...newItems];
-    });
-    
-    e.target.value = '';
+      });
+      addedTotal++;
+    }
+
+    if (validNewItems.length > 0) {
+      setImagesList(prev => [...prev, ...validNewItems]);
+    }
   };
 
   const removeImage = (idToRemove) => {
@@ -561,57 +628,75 @@ export default function ProductForm() {
 
         </div>
 
-        {/* Upload Image */}
+        {/* Upload Image & Video Gallery */}
         <div className="bg-gray-50/50 dark:bg-zinc-900/50 border border-gray-200 dark:border-zinc-800 rounded-2xl p-6 space-y-6">
           <div className="flex justify-between items-center border-b border-gray-200 dark:border-zinc-800 pb-3">
-            <h2 className="text-lg font-bold text-yellow-500">Foto Galeri Produk</h2>
-            <span className="text-xs text-gray-500 dark:text-zinc-400">Bisa upload hingga 5 Foto (Maks 5MB per file)</span>
+            <h2 className="text-lg font-bold text-yellow-500">Foto & Video Galeri Produk</h2>
+            <span className="text-xs text-gray-500 dark:text-zinc-400">Maks 5 file (Foto maks 2MB, Video maks 2 file, maks 25MB & 30 detik)</span>
           </div>
 
           <div className="flex flex-wrap gap-4">
-            {imagesList.map((item, index) => (
-              <div 
-                key={item.id} 
-                draggable={true}
-                onDragStart={(e) => handleDragStart(e, index)}
-                onDragOver={(e) => handleDragOver(e, index)}
-                onDragEnd={handleDragEnd}
-                className={`relative w-36 h-36 rounded-xl overflow-hidden border group shadow-sm bg-gray-50 dark:bg-zinc-950 cursor-grab active:cursor-grabbing transition-all select-none ${
-                  index === 0 
-                    ? 'border-yellow-500 ring-2 ring-yellow-500/20' 
-                    : 'border-gray-200 dark:border-zinc-800 hover:border-yellow-500/50'
-                } ${draggedIndex === index ? 'opacity-40 scale-95 border-dashed' : ''}`}
-              >
-                <img src={item.url} alt="Preview" className="w-full h-full object-cover pointer-events-none" />
+            {imagesList.map((item, index) => {
+              const isVideo = item.file 
+                ? item.file.type.startsWith('video/')
+                : (item.url && item.url.match(/\.(mp4|webm|ogg|mov|avi|mkv|3gp)($|\?)/i));
                 
-                {/* Drag handle overlay */}
-                <div className="absolute top-2 left-2 p-1 bg-black/40 backdrop-blur-sm rounded text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                  <GripVertical size={12} />
-                </div>
-
-                {/* Main Photo Badge */}
-                {index === 0 && (
-                  <div className="absolute bottom-2 left-2 bg-yellow-500 text-hitam text-[10px] font-bold px-2 py-0.5 rounded shadow-sm pointer-events-none">
-                    Utama
-                  </div>
-                )}
-
-                <button 
-                  type="button" 
-                  onClick={() => removeImage(item.id)} 
-                  className="absolute top-2 right-2 p-1.5 bg-red-500/80 hover:bg-red-600 text-white rounded-lg transition-colors shadow-lg z-10"
+              return (
+                <div 
+                  key={item.id} 
+                  draggable={true}
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDragEnd={handleDragEnd}
+                  className={`relative w-36 h-36 rounded-xl overflow-hidden border group shadow-sm bg-gray-50 dark:bg-zinc-950 cursor-grab active:cursor-grabbing transition-all select-none ${
+                    index === 0 
+                      ? 'border-yellow-500 ring-2 ring-yellow-500/20' 
+                      : 'border-gray-200 dark:border-zinc-800 hover:border-yellow-500/50'
+                  } ${draggedIndex === index ? 'opacity-40 scale-95 border-dashed' : ''}`}
                 >
-                  <X size={14} />
-                </button>
-              </div>
-            ))}
+                  {isVideo ? (
+                    <div className="relative w-full h-full bg-black">
+                      <video src={item.url} className="w-full h-full object-cover pointer-events-none" muted />
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                        <Play size={20} className="text-white fill-white opacity-80" />
+                      </div>
+                      <div className="absolute top-2 left-2 bg-yellow-500 text-hitam text-[8px] font-extrabold px-1.5 py-0.5 rounded shadow-sm">
+                        VIDEO
+                      </div>
+                    </div>
+                  ) : (
+                    <img src={item.url} alt="Preview" className="w-full h-full object-cover pointer-events-none" />
+                  )}
+                  
+                  {/* Drag handle overlay */}
+                  <div className="absolute top-2 left-2 p-1 bg-black/40 backdrop-blur-sm rounded text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    <GripVertical size={12} />
+                  </div>
+
+                  {/* Main Photo Badge */}
+                  {index === 0 && (
+                    <div className="absolute bottom-2 left-2 bg-yellow-500 text-hitam text-[10px] font-bold px-2 py-0.5 rounded shadow-sm pointer-events-none">
+                      Utama
+                    </div>
+                  )}
+
+                  <button 
+                    type="button" 
+                    onClick={() => removeImage(item.id)} 
+                    className="absolute top-2 right-2 p-1.5 bg-red-500/80 hover:bg-red-600 text-white rounded-lg transition-colors shadow-lg z-10"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              );
+            })}
             
             {imagesList.length < 5 && (
               <label className="w-36 h-36 rounded-xl border-2 border-dashed border-gray-300 dark:border-zinc-700 hover:border-yellow-500 flex flex-col items-center justify-center text-zinc-500 hover:text-yellow-500 cursor-pointer transition-colors bg-white/50 dark:bg-zinc-950/50">
                 <Upload size={24} className="mb-2" />
-                <span className="text-xs font-semibold">Upload Foto</span>
+                <span className="text-xs font-semibold">Upload File</span>
                 <span className="text-[10px] mt-0.5 text-gray-400 dark:text-zinc-600">({imagesList.length}/5)</span>
-                <input type="file" multiple accept="image/*" onChange={handleImageChange} className="hidden" />
+                <input type="file" multiple accept="image/*,video/*" onChange={handleImageChange} className="hidden" />
               </label>
             )}
           </div>

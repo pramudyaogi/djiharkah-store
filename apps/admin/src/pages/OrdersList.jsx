@@ -419,8 +419,39 @@ export default function OrdersList() {
     }
   };
 
-  useEffect(() => {
+  const autoCleanupExpiredOrders = async () => {
+    try {
+      // 1. Delete cancelled orders older than 7 days
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      
+      const { error: err1 } = await supabase
+        .from('orders')
+        .delete()
+        .eq('status', 'cancelled')
+        .lt('created_at', sevenDaysAgo.toISOString());
+        
+      if (err1) console.error('Failed to auto-cleanup cancelled orders:', err1);
+      
+      // 2. Delete completed (delivered) orders older than 100 days
+      const hundredDaysAgo = new Date();
+      hundredDaysAgo.setDate(hundredDaysAgo.getDate() - 100);
+      
+      const { error: err2 } = await supabase
+        .from('orders')
+        .delete()
+        .eq('status', 'delivered')
+        .lt('created_at', hundredDaysAgo.toISOString());
+        
+      if (err2) console.error('Failed to auto-cleanup delivered orders:', err2);
+      
+    } catch (err) {
+      console.error('Error running orders auto-cleanup:', err);
+    }
+  };
 
+  useEffect(() => {
+    autoCleanupExpiredOrders();
     fetchOrders();
   }, []);
 
@@ -502,14 +533,14 @@ export default function OrdersList() {
     });
   };
 
-  // Confirm and execute soft delete
+  // Confirm and execute hard delete
   const handleConfirmDelete = async () => {
     try {
       const idsToDelete = deleteModal.isBulk ? selectedOrderIds : [deleteModal.orderId];
       
       const { error } = await supabase
         .from('orders')
-        .update({ is_deleted: true })
+        .delete()
         .in('id', idsToDelete);
 
       if (error) throw error;
@@ -696,6 +727,15 @@ export default function OrdersList() {
                         >
                           <Eye size={14} /> Detail
                         </Link>
+                        {isSelectable(order) && (
+                          <button
+                            onClick={() => handleOpenDelete(order.id, order.tracking_code)}
+                            className="inline-flex items-center justify-center p-1.5 text-gray-450 dark:text-zinc-400 hover:text-red-600 dark:hover:text-red-550 bg-gray-100 dark:bg-zinc-800/50 hover:bg-gray-200 dark:hover:bg-zinc-800 rounded-lg transition-colors text-xs font-medium"
+                            title="Hapus Pesanan"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
