@@ -21,10 +21,7 @@ export default function SalesReport() {
     startDate: '',
     endDate: ''
   });
-  const [quickFilter, setQuickFilter] = useState('month'); // today | week | month | all
-
-  // Hover state for charts
-  const [hoveredPoint, setHoveredPoint] = useState(null);
+  const [quickFilter, setQuickFilter] = useState('1m'); // 1d | 1w | 1m | 3m | ytd | all
 
   const getLocalDateString = (date) => {
     const tzOffset = date.getTimezoneOffset() * 60000;
@@ -34,9 +31,10 @@ export default function SalesReport() {
   // Set default dates
   useEffect(() => {
     const today = new Date();
-    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const past = new Date();
+    past.setMonth(today.getMonth() - 1);
     setDateRange({
-      startDate: getLocalDateString(firstDay),
+      startDate: getLocalDateString(past),
       endDate: getLocalDateString(today),
     });
   }, []);
@@ -47,17 +45,28 @@ export default function SalesReport() {
     let start = '';
     const end = getLocalDateString(today);
 
-    if (type === 'today') {
+    if (type === '1d') {
       start = end;
-    } else if (type === 'week') {
+    } else if (type === '1w') {
       const past = new Date();
       past.setDate(today.getDate() - 7);
       start = getLocalDateString(past);
-    } else if (type === 'month') {
-      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-      start = getLocalDateString(firstDay);
+    } else if (type === '1m') {
+      const past = new Date();
+      past.setMonth(today.getMonth() - 1);
+      start = getLocalDateString(past);
+    } else if (type === '3m') {
+      const past = new Date();
+      past.setMonth(today.getMonth() - 3);
+      start = getLocalDateString(past);
+    } else if (type === 'ytd') {
+      start = `${today.getFullYear()}-01-01`;
+    } else if (type === '1y') {
+      const past = new Date();
+      past.setFullYear(today.getFullYear() - 1);
+      start = getLocalDateString(past);
     } else if (type === 'all') {
-      start = '2026-01-01'; // Default system start date
+      start = '2020-01-01'; // Fetch all historical data
     }
 
     setDateRange({ startDate: start, endDate: end });
@@ -201,140 +210,250 @@ export default function SalesReport() {
     fetchSalesData();
   }, [dateRange]);
 
-  // Aggregate daily statistics for charts
+  // Aggregate statistics for charts (with smart grouping to prevent delays on long ranges)
   const getChartData = () => {
     if (orders.length === 0) return [];
     
-    const dailyMap = {};
     const start = new Date(dateRange.startDate);
     const end = new Date(dateRange.endDate);
-    
-    // Fill all dates in range with 0
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const dateStr = d.toISOString().split('T')[0];
-      dailyMap[dateStr] = { revenue: 0, itemsSold: 0 };
+    const diffDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+
+    let grouping = 'day';
+    if (quickFilter) {
+      if (quickFilter === '1d') grouping = 'minute';
+      else if (['1w', '1m', '3m'].includes(quickFilter)) grouping = 'day';
+      else if (['ytd', '1y'].includes(quickFilter)) grouping = 'week';
+      else if (quickFilter === 'all') grouping = 'month';
+    } else {
+      if (diffDays <= 1) grouping = 'minute';
+      else if (diffDays <= 90) grouping = 'day';
+      else if (diffDays <= 366) grouping = 'week';
+      else grouping = 'month';
     }
-    
-    orders.forEach(order => {
-      const dateStr = new Date(order.created_at).toISOString().split('T')[0];
-      const netAmount = parseFloat(order.total_amount) - parseFloat(order.shipping_cost);
-      const cleanRevenue = netAmount >= 0 ? netAmount : 0;
+
+    if (grouping === 'minute') {
+      const minuteMap = {};
       
-      let itemsCount = 0;
-      if (order.is_archived_record) {
-        itemsCount = order.items_count || 0;
-      } else {
-        order.order_items?.forEach(item => {
-          itemsCount += item.quantity;
-        });
+      // Start anchor
+      minuteMap['00:00'] = { revenue: 0, itemsSold: 0 };
+      
+      orders.forEach(order => {
+        const date = new Date(order.created_at);
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const timeKey = `${hours}:${minutes}`;
+        
+        const netAmount = parseFloat(order.total_amount) - parseFloat(order.shipping_cost);
+        const cleanRevenue = netAmount >= 0 ? netAmount : 0;
+        
+        let itemsCount = 0;
+        if (order.is_archived_record) {
+          itemsCount = order.items_count || 0;
+        } else {
+          order.order_items?.forEach(item => {
+            itemsCount += item.quantity;
+          });
+        }
+        
+        if (!minuteMap[timeKey]) {
+          minuteMap[timeKey] = { revenue: 0, itemsSold: 0 };
+        }
+        minuteMap[timeKey].revenue += cleanRevenue;
+        minuteMap[timeKey].itemsSold += itemsCount;
+      });
+      
+      // End anchor
+      const endAnchor = (dateRange.endDate === getLocalDateString(new Date())) 
+        ? `${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`
+        : '23:59';
+        
+      if (!minuteMap[endAnchor]) {
+        minuteMap[endAnchor] = { revenue: 0, itemsSold: 0 };
+      }
+      
+      return Object.keys(minuteMap)
+        .sort()
+        .map(timeKey => ({
+          dateStr: timeKey,
+          label: timeKey,
+          revenue: minuteMap[timeKey].revenue,
+          itemsSold: minuteMap[timeKey].itemsSold
+        }));
+    } else if (grouping === 'week') {
+      const getStartOfWeek = (date) => {
+        const d = new Date(date);
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday start
+        const startOfWeek = new Date(d.setDate(diff));
+        startOfWeek.setHours(0, 0, 0, 0);
+        return startOfWeek;
+      };
+
+      const weeklyMap = {};
+      let current = getStartOfWeek(start);
+      while (current <= end) {
+        const dateStr = current.toISOString().split('T')[0];
+        weeklyMap[dateStr] = { revenue: 0, itemsSold: 0 };
+        current.setDate(current.getDate() + 7);
       }
 
-      if (dailyMap[dateStr] !== undefined) {
-        dailyMap[dateStr].revenue += cleanRevenue;
-        dailyMap[dateStr].itemsSold += itemsCount;
-      } else {
-        dailyMap[dateStr] = { revenue: cleanRevenue, itemsSold: itemsCount };
-      }
-    });
-    
-    return Object.keys(dailyMap)
-      .sort()
-      .map(dateStr => {
-        const formattedDate = new Date(dateStr).toLocaleDateString('id-ID', {
-          day: '2-digit',
-          month: 'short'
-        });
-        return {
-          dateStr,
-          label: formattedDate,
-          revenue: dailyMap[dateStr].revenue,
-          itemsSold: dailyMap[dateStr].itemsSold
-        };
+      orders.forEach(order => {
+        const orderDate = new Date(order.created_at);
+        const weekStart = getStartOfWeek(orderDate);
+        const dateStr = weekStart.toISOString().split('T')[0];
+        
+        const netAmount = parseFloat(order.total_amount) - parseFloat(order.shipping_cost);
+        const cleanRevenue = netAmount >= 0 ? netAmount : 0;
+        
+        let itemsCount = 0;
+        if (order.is_archived_record) {
+          itemsCount = order.items_count || 0;
+        } else {
+          order.order_items?.forEach(item => {
+            itemsCount += item.quantity;
+          });
+        }
+        
+        if (weeklyMap[dateStr] !== undefined) {
+          weeklyMap[dateStr].revenue += cleanRevenue;
+          weeklyMap[dateStr].itemsSold += itemsCount;
+        } else {
+          const closestWeekStr = Object.keys(weeklyMap).reduce((closest, curr) => {
+            const currDate = new Date(curr);
+            const closestDate = new Date(closest);
+            return Math.abs(orderDate - currDate) < Math.abs(orderDate - closestDate) ? curr : closest;
+          }, Object.keys(weeklyMap)[0]);
+          
+          if (closestWeekStr && weeklyMap[closestWeekStr]) {
+            weeklyMap[closestWeekStr].revenue += cleanRevenue;
+            weeklyMap[closestWeekStr].itemsSold += itemsCount;
+          }
+        }
       });
+
+      return Object.keys(weeklyMap)
+        .sort()
+        .map(dateStr => {
+          const startDate = new Date(dateStr);
+          const formattedStart = startDate.toLocaleDateString('id-ID', {
+            day: '2-digit',
+            month: 'short'
+          }).replace(/\./g, '');
+          
+          return {
+            dateStr,
+            label: `Mgg: ${formattedStart}`,
+            revenue: weeklyMap[dateStr].revenue,
+            itemsSold: weeklyMap[dateStr].itemsSold
+          };
+        });
+    } else if (grouping === 'month') {
+      const monthlyMap = {};
+      let current = new Date(start.getFullYear(), start.getMonth(), 1);
+      while (current <= end) {
+        const monthKey = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`;
+        monthlyMap[monthKey] = { revenue: 0, itemsSold: 0 };
+        current.setMonth(current.getMonth() + 1);
+      }
+
+      orders.forEach(order => {
+        const date = new Date(order.created_at);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        const netAmount = parseFloat(order.total_amount) - parseFloat(order.shipping_cost);
+        const cleanRevenue = netAmount >= 0 ? netAmount : 0;
+        
+        let itemsCount = 0;
+        if (order.is_archived_record) {
+          itemsCount = order.items_count || 0;
+        } else {
+          order.order_items?.forEach(item => {
+            itemsCount += item.quantity;
+          });
+        }
+        
+        if (monthlyMap[monthKey] !== undefined) {
+          monthlyMap[monthKey].revenue += cleanRevenue;
+          monthlyMap[monthKey].itemsSold += itemsCount;
+        }
+      });
+
+      return Object.keys(monthlyMap)
+        .sort()
+        .map(monthKey => {
+          const [year, month] = monthKey.split('-');
+          const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+          const formattedDate = date.toLocaleDateString('id-ID', {
+            month: 'short',
+            year: '2-digit'
+          }).replace(/\./g, '');
+          
+          return {
+            dateStr: monthKey,
+            label: formattedDate,
+            revenue: monthlyMap[monthKey].revenue,
+            itemsSold: monthlyMap[monthKey].itemsSold
+          };
+        });
+    } else {
+      // Group by Day (detail view for 1W, 1M, 3M)
+      const dailyMap = {};
+      
+      // Fill all dates in range with 0
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().split('T')[0];
+        dailyMap[dateStr] = { revenue: 0, itemsSold: 0 };
+      }
+      
+      orders.forEach(order => {
+        const dateStr = new Date(order.created_at).toISOString().split('T')[0];
+        const netAmount = parseFloat(order.total_amount) - parseFloat(order.shipping_cost);
+        const cleanRevenue = netAmount >= 0 ? netAmount : 0;
+        
+        let itemsCount = 0;
+        if (order.is_archived_record) {
+          itemsCount = order.items_count || 0;
+        } else {
+          order.order_items?.forEach(item => {
+            itemsCount += item.quantity;
+          });
+        }
+
+        if (dailyMap[dateStr] !== undefined) {
+          dailyMap[dateStr].revenue += cleanRevenue;
+          dailyMap[dateStr].itemsSold += itemsCount;
+        }
+      });
+      
+      return Object.keys(dailyMap)
+        .sort()
+        .map(dateStr => {
+          const formattedDate = new Date(dateStr).toLocaleDateString('id-ID', {
+            day: '2-digit',
+            month: 'short',
+            year: '2-digit'
+          }).replace(/\./g, '');
+          return {
+            dateStr,
+            label: formattedDate,
+            revenue: dailyMap[dateStr].revenue,
+            itemsSold: dailyMap[dateStr].itemsSold
+          };
+        });
+    }
   };
 
   // Helper function to render a custom SVG Line Chart
   const renderChart = (title, key, color, gradientId, hoverPrefix, formatFn) => {
-    const chartData = getChartData();
-    const values = chartData.map(d => d[key]);
-    const maxVal = Math.max(...values, key === 'revenue' ? 100000 : 5);
-    
-    const width = 500;
-    const height = 180;
-    const paddingX = 45;
-    const paddingY = 20;
-
-    const points = chartData.map((d, index) => {
-      const x = paddingX + (index / Math.max(chartData.length - 1, 1)) * (width - paddingX * 2);
-      const y = height - paddingY - (d[key] / maxVal) * (height - paddingY * 2);
-      return { x, y, label: d.label, val: d[key] };
-    });
-
-    let linePath = '';
-    let areaPath = '';
-    if (points.length > 0) {
-      linePath = `M ${points[0].x} ${points[0].y} ` + points.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ');
-      areaPath = `${linePath} L ${points[points.length - 1].x} ${height - paddingY} L ${points[0].x} ${height - paddingY} Z`;
-    }
-
     return (
-      <div className="relative bg-white dark:bg-zinc-900/40 border border-gray-200 dark:border-zinc-800/60 rounded-3xl p-5 shadow-soft flex-1 min-w-[280px]">
-        <h3 className="text-sm font-bold text-gray-800 dark:text-zinc-200 mb-4">{title}</h3>
-        <div className="relative h-[180px] w-full">
-          <svg className="w-full h-full" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
-            <defs>
-              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={color} stopOpacity="0.3" />
-                <stop offset="100%" stopColor={color} stopOpacity="0.0" />
-              </linearGradient>
-            </defs>
-
-            {/* Grid Lines */}
-            <line x1={paddingX} y1={paddingY} x2={width - paddingX} y2={paddingY} stroke="currentColor" className="text-gray-100 dark:text-zinc-800/40" strokeWidth="1" strokeDasharray="4 4" />
-            <line x1={paddingX} y1={height / 2} x2={width - paddingX} y2={height / 2} stroke="currentColor" className="text-gray-100 dark:text-zinc-800/40" strokeWidth="1" strokeDasharray="4 4" />
-            <line x1={paddingX} y1={height - paddingY} x2={width - paddingX} y2={height - paddingY} stroke="currentColor" className="text-gray-200 dark:text-zinc-800" strokeWidth="1.5" />
-
-            {/* Area & Line */}
-            {points.length > 0 && (
-              <>
-                <path d={areaPath} fill={`url(#${gradientId})`} />
-                <path d={linePath} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-              </>
-            )}
-
-            {/* Interaction Circles */}
-            {points.map((p, idx) => (
-              <circle
-                key={idx}
-                cx={p.x}
-                cy={p.y}
-                r={hoveredPoint?.key === key && hoveredPoint?.idx === idx ? 6 : 4}
-                fill={hoveredPoint?.key === key && hoveredPoint?.idx === idx ? '#fff' : color}
-                stroke={color}
-                strokeWidth={2}
-                className="transition-all duration-150 cursor-pointer"
-                onMouseEnter={() => setHoveredPoint({ key, idx, x: p.x, y: p.y, label: p.label, val: p.val })}
-                onMouseLeave={() => setHoveredPoint(null)}
-              />
-            ))}
-          </svg>
-
-          {/* Custom Tooltip */}
-          {hoveredPoint && hoveredPoint.key === key && (
-            <div 
-              className="absolute bg-zinc-950 border border-zinc-800 text-white rounded-xl p-2.5 shadow-2xl text-[10px] pointer-events-none z-10 animate-fade-in"
-              style={{ 
-                left: `${(hoveredPoint.x / width) * 100}%`, 
-                top: `${(hoveredPoint.y / height) * 100 - 55}px`,
-                transform: 'translateX(-50%)'
-              }}
-            >
-              <div className="font-semibold text-zinc-400">{hoveredPoint.label}</div>
-              <div className="font-bold text-emas mt-0.5">{hoverPrefix} {formatFn(hoveredPoint.val)}</div>
-            </div>
-          )}
-        </div>
-      </div>
+      <InteractiveChart
+        title={title}
+        chartData={getChartData()}
+        dataKey={key}
+        color={color}
+        gradientId={gradientId}
+        hoverPrefix={hoverPrefix}
+        formatFn={formatFn}
+      />
     );
   };
 
@@ -417,20 +536,24 @@ export default function SalesReport() {
       <div className="bg-white/80 dark:bg-zinc-900/40 backdrop-blur-md rounded-3xl border border-gray-200 dark:border-zinc-800/60 p-6 shadow-soft space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           {/* Quick Filter Buttons */}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1 bg-gray-100/50 dark:bg-zinc-800/20 p-1 rounded-2xl border border-gray-200/50 dark:border-zinc-800/40">
             {[
-              { id: 'today', label: 'Hari Ini' },
-              { id: 'week', label: '7 Hari Terakhir' },
-              { id: 'month', label: 'Bulan Ini' },
-              { id: 'all', label: 'Semua Waktu' }
+              { id: '1d', label: '1D', tooltip: 'Hari Ini' },
+              { id: '1w', label: '1W', tooltip: '7 Hari Terakhir' },
+              { id: '1m', label: '1M', tooltip: '1 Bulan Terakhir' },
+              { id: '3m', label: '3M', tooltip: '3 Bulan Terakhir' },
+              { id: 'ytd', label: 'YTD', tooltip: 'Tahun Ini (Year to Date)' },
+              { id: '1y', label: '1Y', tooltip: '1 Tahun Terakhir' },
+              { id: 'all', label: 'ALL', tooltip: 'Semua Waktu' }
             ].map(f => (
               <button
                 key={f.id}
                 onClick={() => handleQuickFilter(f.id)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                title={f.tooltip}
+                className={`px-3.5 py-1.5 rounded-xl text-[11px] font-bold transition-all ${
                   quickFilter === f.id
                     ? 'bg-yellow-500 text-black shadow-glow'
-                    : 'bg-gray-100 dark:bg-zinc-800/50 hover:bg-gray-200 dark:hover:bg-zinc-800 text-gray-600 dark:text-zinc-300'
+                    : 'bg-transparent hover:bg-gray-200/60 dark:hover:bg-zinc-800/50 text-gray-500 dark:text-zinc-400'
                 }`}
               >
                 {f.label}
@@ -601,6 +724,312 @@ export default function SalesReport() {
           </div>
         )}
 
+      </div>
+    </div>
+  );
+}
+
+function InteractiveChart({ title, chartData, dataKey, color, gradientId, hoverPrefix, formatFn }) {
+  const containerRef = React.useRef(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const [scrollX, setScrollX] = useState(0);
+  const [hoveredPoint, setHoveredPoint] = useState(null);
+
+  const values = chartData.map(d => d[dataKey]);
+  const maxVal = Math.max(...values, dataKey === 'revenue' ? 100000 : 5);
+
+  const chartHeight = 220;
+  const paddingTop = 25;
+  const paddingBottom = 40;
+  const paddingLeft = 40; // Increased to 40 to prevent leftmost date label from clipping
+  const paddingRight = 110; // Extra room for long RP currency strings on the right
+  const chartInnerHeight = chartHeight - paddingTop - paddingBottom;
+
+  // Width of each step (day)
+  const stepWidth = 65;
+  const chartWidth = Math.max(500, chartData.length * stepWidth + paddingLeft + paddingRight);
+
+  const points = chartData.map((d, index) => {
+    const x = paddingLeft + (index / Math.max(chartData.length - 1, 1)) * (chartWidth - paddingLeft - paddingRight);
+    const y = chartHeight - paddingBottom - (d[dataKey] / maxVal) * chartInnerHeight;
+    return { x, y, label: d.label, val: d[dataKey] };
+  });
+
+  // Scroll to the end (rightmost side) on mount or data change
+  React.useEffect(() => {
+    if (containerRef.current) {
+      const timer = setTimeout(() => {
+        if (containerRef.current) {
+          containerRef.current.scrollLeft = containerRef.current.scrollWidth;
+          setScrollX(containerRef.current.scrollLeft);
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [chartData]);
+
+  const getCurvePath = (pts) => {
+    if (pts.length === 0) return '';
+    if (pts.length === 1) return `M ${pts[0].x} ${pts[0].y}`;
+    if (pts.length === 2) return `M ${pts[0].x} ${pts[0].y} L ${pts[1].x} ${pts[1].y}`;
+    
+    let path = `M ${pts[0].x} ${pts[0].y}`;
+    for (let i = 1; i < pts.length; i++) {
+      const p0 = pts[i - 2] || pts[0];
+      const p1 = pts[i - 1];
+      const p2 = pts[i];
+      const p3 = pts[i + 1] || p2;
+      
+      const cp1x = p1.x + (p2.x - p0.x) / 12;
+      const cp1y = p1.y + (p2.y - p0.y) / 12;
+      const cp2x = p2.x - (p3.x - p1.x) / 12;
+      const cp2y = p2.y - (p3.y - p1.y) / 12;
+      
+      path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
+    }
+    return path;
+  };
+
+  let linePath = '';
+  let areaPath = '';
+  if (points.length > 0) {
+    linePath = getCurvePath(points);
+    areaPath = `${linePath} L ${points[points.length - 1].x} ${chartHeight - paddingBottom} L ${points[0].x} ${chartHeight - paddingBottom} Z`;
+  }
+
+  // Drag handlers
+  const handleMouseDown = (e) => {
+    setIsDragging(true);
+    setStartX(e.pageX - containerRef.current.offsetLeft);
+    setScrollLeft(containerRef.current.scrollLeft);
+  };
+
+  const handleMouseLeave = () => {
+    setIsDragging(false);
+    setHoveredPoint(null);
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleMouseMove = (e) => {
+    if (isDragging) {
+      e.preventDefault();
+      const x = e.pageX - containerRef.current.offsetLeft;
+      const walk = (x - startX) * 1.5;
+      containerRef.current.scrollLeft = scrollLeft - walk;
+      setScrollX(containerRef.current.scrollLeft);
+      return;
+    }
+
+    if (points.length === 0) return;
+
+    // Find nearest point
+    const rect = containerRef.current.getBoundingClientRect();
+    const mouseXInContainer = e.clientX - rect.left;
+    const mouseXInSvg = mouseXInContainer + containerRef.current.scrollLeft;
+
+    let closestPoint = points[0];
+    let closestIdx = 0;
+    let minDiff = Math.abs(points[0].x - mouseXInSvg);
+
+    for (let i = 1; i < points.length; i++) {
+      const diff = Math.abs(points[i].x - mouseXInSvg);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestPoint = points[i];
+        closestIdx = i;
+      }
+    }
+
+    // Only hover if mouse is within chart boundaries
+    if (mouseXInSvg >= paddingLeft - 10 && mouseXInSvg <= chartWidth - paddingRight + 10) {
+      setHoveredPoint({
+        idx: closestIdx,
+        x: closestPoint.x,
+        y: closestPoint.y,
+        label: closestPoint.label,
+        val: closestPoint.val
+      });
+    } else {
+      setHoveredPoint(null);
+    }
+  };
+
+  const handleScroll = (e) => {
+    setScrollX(e.target.scrollLeft);
+  };
+
+  const formatLabel = (v) => {
+    return hoverPrefix ? `${hoverPrefix} ${formatFn(v)}` : formatFn(v);
+  };
+
+  // Tooltip horizontal clamping calculations
+  const containerWidth = containerRef.current ? containerRef.current.clientWidth : 500;
+  const halfTooltipWidth = 65;
+  const tooltipCenter = hoveredPoint ? hoveredPoint.x - scrollX : 0;
+  const clampedLeft = Math.max(halfTooltipWidth + 5, Math.min(containerWidth - halfTooltipWidth - 5, tooltipCenter));
+
+  return (
+    <div className="relative bg-white dark:bg-zinc-900/40 border border-gray-200 dark:border-zinc-800/60 rounded-3xl p-5 shadow-soft flex-1 min-w-[280px]">
+      <style>{`
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}</style>
+      
+      <h3 className="text-sm font-bold text-gray-800 dark:text-zinc-200 mb-4">{title}</h3>
+      
+      {/* Wrapper for scrollable chart and sticky Y-labels (overflow-visible to prevent tooltip vertical clipping) */}
+      <div className="relative w-full overflow-visible">
+        {/* Scrollable Container */}
+        <div 
+          ref={containerRef}
+          className={`relative w-full overflow-x-auto overflow-y-hidden select-none no-scrollbar ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+          onMouseDown={handleMouseDown}
+          onMouseLeave={handleMouseLeave}
+          onMouseUp={handleMouseUp}
+          onMouseMove={handleMouseMove}
+          onScroll={handleScroll}
+        >
+          <div style={{ width: `${chartWidth}px`, height: `${chartHeight}px` }} className="relative">
+            <svg 
+              width={chartWidth} 
+              height={chartHeight} 
+              viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+              className="absolute inset-0 pointer-events-none"
+            >
+              <defs>
+                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+                  <stop offset="100%" stopColor={color} stopOpacity="0.0" />
+                </linearGradient>
+              </defs>
+
+              {/* Horizontal Grid Lines */}
+              <line 
+                x1={paddingLeft} 
+                y1={paddingTop} 
+                x2={chartWidth - paddingRight} 
+                y2={paddingTop} 
+                stroke="currentColor" 
+                className="text-gray-100 dark:text-zinc-800/40" 
+                strokeWidth="1" 
+                strokeDasharray="4 4" 
+              />
+              <line 
+                x1={paddingLeft} 
+                y1={paddingTop + chartInnerHeight / 2} 
+                x2={chartWidth - paddingRight} 
+                y2={paddingTop + chartInnerHeight / 2} 
+                stroke="currentColor" 
+                className="text-gray-100 dark:text-zinc-800/40" 
+                strokeWidth="1" 
+                strokeDasharray="4 4" 
+              />
+              <line 
+                x1={paddingLeft} 
+                y1={chartHeight - paddingBottom} 
+                x2={chartWidth - paddingRight} 
+                y2={chartHeight - paddingBottom} 
+                stroke="currentColor" 
+                className="text-gray-200 dark:text-zinc-800" 
+                strokeWidth="1.5" 
+              />
+
+              {/* Vertical grid lines and date labels */}
+              {points.map((p, idx) => (
+                <React.Fragment key={idx}>
+                  {/* Vertical grid line */}
+                  <line 
+                    x1={p.x} 
+                    y1={paddingTop} 
+                    x2={p.x} 
+                    y2={chartHeight - paddingBottom} 
+                    stroke="currentColor" 
+                    className="text-gray-100/50 dark:text-zinc-800/20" 
+                    strokeWidth="1" 
+                    strokeDasharray="3 3" 
+                  />
+                  {/* Date Label */}
+                  <text 
+                    x={p.x} 
+                    y={chartHeight - 15} 
+                    className="fill-gray-400 dark:fill-zinc-500 text-[9px] font-medium" 
+                    textAnchor="middle"
+                  >
+                    {p.label}
+                  </text>
+                </React.Fragment>
+              ))}
+
+              {/* Area & Line */}
+              {points.length > 0 && (
+                <>
+                  <path d={areaPath} fill={`url(#${gradientId})`} />
+                  <path d={linePath} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                </>
+              )}
+
+              {/* Vertical guide line on hover */}
+              {hoveredPoint && (
+                <line 
+                  x1={hoveredPoint.x} 
+                  y1={paddingTop} 
+                  x2={hoveredPoint.x} 
+                  y2={chartHeight - paddingBottom} 
+                  stroke={color} 
+                  strokeWidth="1.5" 
+                  strokeDasharray="3 3"
+                />
+              )}
+
+              {/* Active dot on hover */}
+              {hoveredPoint && (
+                <circle 
+                  cx={hoveredPoint.x} 
+                  cy={hoveredPoint.y} 
+                  r="6" 
+                  fill="#FFF" 
+                  stroke={color} 
+                  strokeWidth="3"
+                />
+              )}
+            </svg>
+          </div>
+        </div>
+
+        {/* Custom Tooltip rendered in overflow-visible parent so it never clips at the top or left */}
+        {hoveredPoint && (
+          <div 
+            className="absolute bg-zinc-950 border border-zinc-800 text-white rounded-xl p-2.5 shadow-2xl text-[10px] pointer-events-none z-10 animate-fade-in"
+            style={{ 
+              left: `${clampedLeft}px`, 
+              top: `${hoveredPoint.y - 12}px`,
+              transform: 'translate(-50%, -100%)'
+            }}
+          >
+            <div className="font-semibold text-zinc-400">{hoveredPoint.label}</div>
+            <div className="font-bold text-emas mt-0.5">{hoverPrefix ? `${hoverPrefix} ` : ''}{formatFn(hoveredPoint.val)}</div>
+          </div>
+        )}
+
+        {/* Sticky Y-axis labels panel with right-fade gradient */}
+        <div 
+          className="absolute right-0 top-0 bottom-0 w-[115px] pointer-events-none text-gray-400 dark:text-zinc-500 text-[10px] font-semibold bg-gradient-to-l from-white via-white/95 to-transparent dark:from-zinc-900/90 dark:via-zinc-900/60 flex flex-col justify-between pl-8 select-none"
+          style={{ height: `${chartHeight}px` }}
+        >
+          <div className="absolute left-8" style={{ top: `${paddingTop - 7}px` }}>{formatLabel(maxVal)}</div>
+          <div className="absolute left-8" style={{ top: `${paddingTop + chartInnerHeight / 2 - 7}px` }}>{formatLabel(Math.round(maxVal / 2))}</div>
+          <div className="absolute left-8" style={{ top: `${chartHeight - paddingBottom - 7}px` }}>{formatLabel(0)}</div>
+        </div>
       </div>
     </div>
   );

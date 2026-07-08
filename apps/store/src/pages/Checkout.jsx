@@ -328,16 +328,7 @@ export default function Checkout() {
       return;
     }
 
-    const isDomestic = provinceName.toLowerCase().includes('indonesia') || 
-                       provinceName.toLowerCase().includes('id') || 
-                       provinceName.toLowerCase().includes('dki') || 
-                       provinceName.toLowerCase().includes('jawa') ||
-                       provinceName.toLowerCase().includes('sumatera') ||
-                       provinceName.toLowerCase().includes('bali') ||
-                       provinceName.toLowerCase().includes('sulawesi') ||
-                       provinceName.toLowerCase().includes('kalimantan') ||
-                       provinceName.toLowerCase().includes('papua') ||
-                       provinceName.toLowerCase().includes('nusa');
+    const isDomestic = !isInternational;
                        
     let baseShipping = isDomestic ? 15000 : 150000;
 

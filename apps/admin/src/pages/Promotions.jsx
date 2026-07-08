@@ -927,11 +927,17 @@ export default function Promotions() {
                   type="datetime-local"
                   required
                   value={promotions.flash_sale.ends_at}
-                  onChange={(e) => setPromotions(prev => ({
-                    ...prev,
-                    flash_sale: { ...prev.flash_sale, ends_at: e.target.value }
-                  }))}
-                  onBlur={() => saveFlashSaleData(promotions.flash_sale, selectedFlashSaleProducts)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const updated = { ...promotions.flash_sale, ends_at: val };
+                    setPromotions(prev => ({
+                      ...prev,
+                      flash_sale: updated
+                    }));
+                    if (val === '' || (val && val.length >= 16)) {
+                      saveFlashSaleData(updated, selectedFlashSaleProducts);
+                    }
+                  }}
                   className="w-full text-gray-900 dark:text-zinc-100 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-yellow-500"
                 />
                 <p className="text-xs text-gray-400 dark:text-zinc-500 mt-2">
