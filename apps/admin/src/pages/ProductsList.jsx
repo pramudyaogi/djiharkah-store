@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Edit, Trash2, AlertCircle, Tag, GripVertical, X, Archive, RotateCcw } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, AlertCircle, Tag, GripVertical, X, Archive, RotateCcw, Package, Layers } from 'lucide-react';
+import { getStockQueueStats } from '../services/expenses';
 import { 
   getProducts, 
   getCategories, 
@@ -22,6 +23,7 @@ export default function ProductsList() {
   const [categories, setCategories] = useState([]);
   const [archivedProducts, setArchivedProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [stockQueueStats, setStockQueueStats] = useState({ totalPurchased: 0, totalUnallocated: 0, breakdown: {} });
   
   // Active Tab: 'active' or 'archived'
   const [activeTab, setActiveTab] = useState('active');
@@ -68,14 +70,16 @@ export default function ProductsList() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [prodData, catData, archiveData] = await Promise.all([
+      const [prodData, catData, archiveData, queueStats] = await Promise.all([
         getProducts(), 
         getCategories(),
-        getArchivedProducts()
+        getArchivedProducts(),
+        getStockQueueStats()
       ]);
       setProducts(prodData);
       setCategories(catData);
       setArchivedProducts(archiveData);
+      setStockQueueStats(queueStats);
 
       // Automatically clean up archived products older than 30 days
       await autoCleanupExpiredArchive(archiveData);
@@ -470,6 +474,18 @@ export default function ProductsList() {
     currentPage * itemsPerPage
   );
 
+  // Dynamic Widget Stats Logic
+  const selectedCategoryObj = categories.find(c => c.id === selectedCategory);
+  const selectedCategoryName = selectedCategoryObj ? selectedCategoryObj.name : null;
+  
+  let displayUnallocated = stockQueueStats.totalUnallocated;
+  let showBreakdown = true;
+
+  if (selectedCategoryName) {
+    displayUnallocated = (stockQueueStats.breakdown && stockQueueStats.breakdown[selectedCategoryName]) || 0;
+    showBreakdown = false;
+  }
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -491,6 +507,58 @@ export default function ProductsList() {
           >
             <Plus size={16} /> Tambah Produk
           </Link>
+        </div>
+      </div>
+
+      {/* Stock Queue Stats Widget */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 dark:bg-zinc-950 p-4 rounded-2xl border border-gray-200 dark:border-zinc-800">
+        <div className="flex items-center gap-4 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800/80 p-4 rounded-xl shadow-sm">
+          <div className="p-3 bg-yellow-500/10 text-yellow-600 dark:text-yellow-500 rounded-lg">
+            <Package size={22} />
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium">Total Stok Fisik Dibeli (Restock)</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white mt-1">{stockQueueStats.totalPurchased} pcs</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800/80 p-4 rounded-xl shadow-sm">
+          <div className="p-3 bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-lg">
+            <Layers size={22} />
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium">Stok Antrean Belum Terinput ke Toko</p>
+            <div className="flex items-center gap-2 mt-1">
+              <p className="text-xl font-bold text-gray-900 dark:text-white">{displayUnallocated} pcs</p>
+              {displayUnallocated > 0 ? (
+                <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-full animate-pulse">
+                  Butuh Input
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 text-[10px] font-bold bg-green-500/10 text-green-500 border border-green-500/20 rounded-full">
+                  Sinkron
+                </span>
+              )}
+            </div>
+            {/* Breakdown per category if showing all */}
+            {showBreakdown && stockQueueStats.totalUnallocated > 0 && stockQueueStats.breakdown && Object.keys(stockQueueStats.breakdown).length > 0 && (
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                {Object.entries(stockQueueStats.breakdown).map(([cat, qty]) => (
+                  <span key={cat} className="px-1.5 py-0.5 text-[9px] font-semibold bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 rounded">
+                    {cat}: <span className="font-bold text-gray-900 dark:text-zinc-100">{qty} pcs</span>
+                  </span>
+                ))}
+              </div>
+            )}
+            {/* Display category specific label if one is selected */}
+            {!showBreakdown && displayUnallocated > 0 && (
+               <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  <span className="px-1.5 py-0.5 text-[9px] font-semibold bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 rounded">
+                    {selectedCategoryName}: <span className="font-bold text-gray-900 dark:text-zinc-100">{displayUnallocated} pcs</span>
+                  </span>
+               </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -553,6 +621,7 @@ export default function ProductsList() {
                       ) : (
                         filteredCategories.map((category, index) => {
                           const productCount = (activeTab === 'active' ? products : archivedProducts).filter(p => p.category_id === category.id).length;
+                          const isCategoryOff = productCount === 0;
                           const isSelected = selectedCategory === category.id;
 
                           return (
@@ -562,6 +631,7 @@ export default function ProductsList() {
                                   ref={provided.innerRef}
                                   {...provided.draggableProps}
                                   onClick={() => {
+                                    if (isCategoryOff && !isSelected) return; // Optional: prevent clicking off categories if you want, but better leave clickable so they can see it's empty
                                     setSelectedCategory(category.id);
                                     setCurrentPage(1);
                                   }}
@@ -569,7 +639,7 @@ export default function ProductsList() {
                                     isSelected 
                                       ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-500 border-yellow-500/20 font-semibold' 
                                       : 'hover:bg-gray-50 dark:hover:bg-zinc-800/50 text-gray-700 dark:text-zinc-300 border-transparent'
-                                  } ${snapshot.isDragging ? 'bg-gray-100 dark:bg-zinc-800 shadow-md border-yellow-500/30' : ''}`}
+                                  } ${snapshot.isDragging ? 'bg-gray-100 dark:bg-zinc-800 shadow-md border-yellow-500/30' : ''} ${isCategoryOff ? 'opacity-50 grayscale' : ''}`}
                                 >
                                   <div className="flex items-center gap-2 min-w-0">
                                     <div 
@@ -588,6 +658,11 @@ export default function ProductsList() {
                                   </div>
                                   
                                   <div className="flex items-center gap-1.5 shrink-0">
+                                    {isCategoryOff ? (
+                                      <span className="text-[9px] bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wide group-hover:hidden">Off</span>
+                                    ) : (
+                                      <span className="text-[9px] bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wide group-hover:hidden">Aktif</span>
+                                    )}
                                     <span className="text-xs bg-gray-100 dark:bg-zinc-850 text-gray-500 dark:text-zinc-400 px-2 py-0.5 rounded-full font-medium group-hover:hidden">
                                       {productCount}
                                     </span>

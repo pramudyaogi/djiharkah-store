@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { LayoutDashboard, ShoppingCart, Package, LogOut, Tags, Star, Settings, Sun, Moon, Menu, X, BarChart2, Truck, Percent } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Package, LogOut, Tags, Star, Settings, Sun, Moon, Menu, X, BarChart2, Truck, Percent, Layers } from 'lucide-react';
 
 export default function Layout() {
   const { logout, user } = useAuth();
@@ -24,9 +24,10 @@ export default function Layout() {
     { name: 'Dashboard', path: '/', icon: LayoutDashboard },
     { name: 'Orders', path: '/orders', icon: ShoppingCart },
     { name: 'Products & Categories', path: '/products', icon: Package },
+    { name: 'Pengeluaran', path: '/stock-entries', icon: Layers },
     { name: 'Promo & Eksklusif', path: '/promotions', icon: Percent },
     { name: 'Reviews', path: '/reviews', icon: Star },
-    { name: 'Laporan Penjualan', path: '/sales', icon: BarChart2 },
+    { name: 'Laporan Keuangan', path: '/sales', icon: BarChart2 },
     { name: 'Pengaturan Ongkir', path: '/shipping', icon: Truck },
     { name: 'Settings', path: '/settings', icon: Settings },
   ];

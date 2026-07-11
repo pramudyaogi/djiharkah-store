@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Upload, Save, X, GripVertical, Play } from 'lucide-react';
 import { getProductById, getCategories, getProducts, createProduct, updateProduct, uploadProductImage } from '../services/products';
+import { getStockQueueStats } from '../services/expenses';
 import { useToast } from '../contexts/ToastContext';
 
 export default function ProductForm() {
@@ -14,6 +15,7 @@ export default function ProductForm() {
   const [initialLoading, setInitialLoading] = useState(isEdit);
   const [categories, setCategories] = useState([]);
   const [existingProducts, setExistingProducts] = useState([]);
+  const [stockQueueStats, setStockQueueStats] = useState({ breakdown: {} });
 
   // Form State
   const [formData, setFormData] = useState({
@@ -31,6 +33,7 @@ export default function ProductForm() {
     free_shipping_type: 'all',
     is_exclusive: false,
   });
+  const [originalStock, setOriginalStock] = useState(0);
 
   // Validation State
   const [validationErrors, setValidationErrors] = useState({
@@ -45,11 +48,14 @@ export default function ProductForm() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [catData, prodList] = await Promise.all([
+        const [catData, prodList, queueStats] = await Promise.all([
           getCategories(),
-          getProducts()
+          getProducts(),
+          getStockQueueStats()
         ]);
         setCategories(catData);
+        setStockQueueStats(queueStats);
+
         
         // Filter out current product if editing
         const filteredProds = isEdit ? prodList.filter(p => p.id !== id) : prodList;
@@ -72,6 +78,7 @@ export default function ProductForm() {
             free_shipping_type: product.free_shipping_type || 'all',
             is_exclusive: product.is_exclusive ?? false,
           });
+          setOriginalStock(product.stock || 0);
           
           let initialImages = [];
           if (product.images && product.images.length > 0) {
@@ -164,6 +171,28 @@ export default function ProductForm() {
         validateFields(prev.name, cleanSlug);
         return updated;
       });
+      return;
+    }
+
+    if (name === 'stock') {
+      const selectedCat = categories.find(c => c.id === formData.category_id);
+      let unallocated = 0;
+      if (selectedCat) {
+        unallocated = stockQueueStats.breakdown?.[selectedCat.name] || 0;
+      }
+      
+      const maxAllowed = isEdit ? (originalStock + unallocated) : unallocated;
+      let parsedValue = parseInt(value, 10);
+      
+      if (!isNaN(parsedValue) && parsedValue > maxAllowed) {
+        showToast(`Stok maksimal yang bisa diinput untuk kategori ini adalah ${maxAllowed}`, 'warning');
+        parsedValue = maxAllowed;
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        [name]: isNaN(parsedValue) && value === '' ? '' : (isNaN(parsedValue) ? '0' : parsedValue.toString())
+      }));
       return;
     }
 
@@ -516,9 +545,18 @@ export default function ProductForm() {
                 className="w-full bg-white dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 rounded-lg px-4 py-2.5 text-gray-900 dark:text-white focus:border-yellow-500 focus:outline-none transition-colors appearance-none"
               >
                 <option value="">Pilih Kategori</option>
-                {categories.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
-                ))}
+                {categories.map(cat => {
+                  const unallocated = stockQueueStats.breakdown?.[cat.name] || 0;
+                  const label = `${cat.name} (${unallocated} antrean)`;
+                  // Disable if 0 antrean, UNLESS it is the currently selected category (important for editing)
+                  const isDisabled = unallocated === 0 && formData.category_id !== cat.id;
+                  
+                  return (
+                    <option key={cat.id} value={cat.id} disabled={isDisabled}>
+                      {label}
+                    </option>
+                  );
+                })}
               </select>
             </div>
             

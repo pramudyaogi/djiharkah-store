@@ -26,10 +26,13 @@ export default function Products() {
       try {
         const { data: catData } = await supabase
           .from('categories')
-          .select('*')
+          .select('*, products(id, is_active)')
           .order('display_order', { ascending: true })
           .order('name');
-        setCategories(catData || []);
+        const validCategories = (catData || []).filter(cat => {
+          return cat.products && cat.products.some(p => p.is_active !== false);
+        });
+        setCategories(validCategories);
 
         let query = supabase
           .from('products')
@@ -136,11 +139,6 @@ export default function Products() {
     setSearchParams(merged);
   };
 
-  const SORT_OPTIONS = [
-    { key: 'terkait', label: t('relevant') },
-    { key: 'terlaris', label: t('best_seller') },
-  ];
-
   return (
     <div className="w-full max-w-[1400px] mx-auto pt-4 md:pt-6 px-4 flex flex-col md:flex-row gap-4 md:gap-6 lg:gap-8 pb-20">
 
@@ -235,28 +233,6 @@ export default function Products() {
           </div>
         )}
 
-        {/* Sort Header */}
-        <div className="bg-white p-4 mb-8 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between text-sm overflow-x-auto hide-scrollbar">
-          <div className="flex items-center gap-3 min-w-max">
-            <span className="text-gray-500 mr-2 font-medium">{t('sort_by')}</span>
-            {SORT_OPTIONS.map(opt => (
-              <button
-                key={opt.key}
-                onClick={() => updateParams({ sort: opt.key })}
-                className={`px-5 py-2 rounded-full font-bold transition-all ${
-                  sortBy === opt.key
-                    ? 'bg-emas text-hitam shadow-md hover:shadow-lg'
-                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-hitam font-medium'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          <span className="text-gray-400 text-xs ml-4 shrink-0">
-            {filteredProducts.length} {t('products_count')}
-          </span>
-        </div>
 
         {loading ? (
           <div className="flex justify-center items-center min-h-[60vh] w-full col-span-full">

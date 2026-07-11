@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { allocateStock } from './expenses';
 
 // Generate a random string for file names to avoid collision
 const generateRandomString = () => Math.random().toString(36).substring(2, 15);
@@ -69,6 +70,13 @@ export async function getArchivedProducts() {
  * Restore an archived product by setting new stock
  */
 export async function restoreProduct(id, newStock) {
+  const { data: currentProduct } = await supabase
+    .from('products')
+    .select('stock')
+    .eq('id', id)
+    .single();
+  const oldStock = currentProduct?.stock || 0;
+
   const { data, error } = await supabase
     .from('products')
     .update({ stock: newStock, is_archived: false, is_active: true, archived_at: null })
@@ -77,6 +85,11 @@ export async function restoreProduct(id, newStock) {
     .single();
 
   if (error) throw error;
+
+  if (newStock > oldStock) {
+    allocateStock(newStock - oldStock).catch(err => console.error("Stock allocation error:", err));
+  }
+
   return data;
 }
 
@@ -123,6 +136,11 @@ export async function createProduct(productData) {
     .single();
 
   if (productError) throw productError;
+
+  if (product.stock > 0) {
+    allocateStock(product.stock).catch(err => console.error("Stock allocation error:", err));
+  }
+
   return product;
 }
 
@@ -130,6 +148,15 @@ export async function createProduct(productData) {
  * Update an existing product
  */
 export async function updateProduct(id, productData) {
+  const { data: currentProduct } = await supabase
+    .from('products')
+    .select('stock')
+    .eq('id', id)
+    .single();
+  
+  const oldStock = currentProduct?.stock || 0;
+  const newStock = productData.stock !== undefined ? Number(productData.stock) : oldStock;
+
   const { data: product, error: productError } = await supabase
     .from('products')
     .update(productData)
@@ -138,6 +165,11 @@ export async function updateProduct(id, productData) {
     .single();
 
   if (productError) throw productError;
+
+  if (newStock > oldStock) {
+    allocateStock(newStock - oldStock).catch(err => console.error("Stock allocation error:", err));
+  }
+
   return product;
 }
 

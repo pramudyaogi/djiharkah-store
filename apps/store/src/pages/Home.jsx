@@ -31,9 +31,9 @@ export default function Home() {
   useEffect(() => {
     async function fetchData() {
       try {
-        // Query categories, reviews, and all promotions
+        // Query categories with their active products to filter out empty ones
         const [catRes, revRes, promoRes] = await Promise.all([
-          supabase.from('categories').select('*').order('display_order', { ascending: true }).order('name'),
+          supabase.from('categories').select('*, products(id, is_active)').order('display_order', { ascending: true }).order('name'),
           supabase.from('store_reviews').select('*, profiles(full_name)').order('created_at', { ascending: false }),
           supabase.from('promotions').select('*')
         ]);
@@ -42,7 +42,11 @@ export default function Home() {
         if (revRes.error) throw revRes.error;
         if (promoRes.error) throw promoRes.error;
 
-        setCategories(catRes.data || []);
+        // Filter categories that have at least one active product
+        const validCategories = (catRes.data || []).filter(cat => {
+          return cat.products && cat.products.some(p => p.is_active !== false);
+        });
+        setCategories(validCategories);
         setReviews(revRes.data || []);
 
         // Find active promotions

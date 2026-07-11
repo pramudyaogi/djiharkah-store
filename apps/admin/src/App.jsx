@@ -14,6 +14,7 @@ import Settings from './pages/Settings';
 import SalesReport from './pages/SalesReport';
 import ShippingSettings from './pages/ShippingSettings';
 import Promotions from './pages/Promotions';
+import StockEntries from './pages/StockEntries';
 
 function AppRoutes() {
   const { user, role } = useAuth();
@@ -36,6 +37,7 @@ function AppRoutes() {
           <Route path="/orders/:id" element={<OrderDetail />} />
           <Route path="/reviews" element={<Reviews />} />
           <Route path="/sales" element={<SalesReport />} />
+          <Route path="/stock-entries" element={<StockEntries />} />
           <Route path="/promotions" element={<Promotions />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/shipping" element={<ShippingSettings />} />
